@@ -1,0 +1,29 @@
+{
+  "name": "field-vue-backend",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.18.0",
+    "bcryptjs": "^2.4.3",
+    "drizzle-orm": "^0.44.4",
+    "hono": "^4.8.10",
+    "jsonwebtoken": "^9.0.2",
+    "postgres": "^3.4.4"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node": "^20.11.17",
+    "@types/pg": "^8.11.10",
+    "drizzle-kit": "^0.31.4",
+    "tsx": "^4.7.1",
+    "typescript": "^5.8.3"
+  }
+}
