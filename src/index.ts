@@ -6,6 +6,16 @@ import { sql } from 'drizzle-orm'
 import authRouter from './routes/auth.js'
 import jobsRouter from './routes/jobs.js'
 import { requireAuth } from './middleware/auth.js'
+import vertexAiRouter from './routes/vertex-ai.js'
+import { existsSync, writeFileSync } from 'fs'
+
+// create a vertex-ai.json file in the root of the project if doesn't exist
+const vertexAiJsonPath = "./vertex-ai.json";
+if (!existsSync(vertexAiJsonPath)) {
+  // Write the original JSON string to preserve proper escaping
+  writeFileSync(vertexAiJsonPath, process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON!);
+}
+
 
 const app = new Hono()
 
@@ -15,6 +25,9 @@ app.route('/auth', authRouter)
 // Mount jobs routes with authentication
 app.use('/jobs/*', requireAuth)
 app.route('/jobs', jobsRouter)
+app.route('/vertex-ai', vertexAiRouter)
+
+
 
 app.get('/', (c) => {
   return c.text('Hello Hono!')

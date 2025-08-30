@@ -10,7 +10,11 @@ if (!connectionString) {
 
 
 // Create postgres client
-const client = postgres(connectionString)
+const client = postgres(connectionString, { 
+  max: 20,
+  idle_timeout: 10000,
+  connect_timeout: 10000, // 10 seconds to establish connection
+})
 
 // Create drizzle instance
 export const db = drizzle(client, { schema })
