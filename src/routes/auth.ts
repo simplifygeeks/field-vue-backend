@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { db } from '../db/index.js'
-import { users } from '../db/schema.js'
+import { users, jobs } from '../db/schema.js'
 import { 
   hashPassword, 
   comparePassword, 
@@ -9,6 +9,77 @@ import {
 } from '../auth/config.js'
 
 const authRouter = new Hono()
+
+// Function to create temporary jobs for new users
+async function createTemporaryJobs(userId: string, userName: string) {
+  try {
+    // Find a contractor to assign jobs to (or create a default one)
+    let contractor = await db.query.users.findFirst({
+      where: (users, { eq }) => eq(users.role, 'contractor'),
+    })
+
+    // If no contractor exists, create a default one
+    if (!contractor) {
+      const [defaultContractor] = await db.insert(users).values({
+        name: 'Default Contractor',
+        email: 'contractor@example.com',
+        password: await hashPassword('temp123'), // Temporary password
+        role: 'contractor',
+      }).returning()
+      contractor = defaultContractor
+    }
+
+    // Create three temporary jobs
+    const temporaryJobs = [
+      {
+        title: 'Kitchen Wall Painting',
+        description: 'Paint the kitchen walls with a fresh coat. The walls are currently white and need to be painted in a light beige color. Area is approximately 200 sq ft.',
+        customerName: userName,
+        customerAddress: '123 Main Street, Anytown, USA',
+        customerPhone: '+1-555-0123',
+        appointmentDate: '2024-01-15',
+        estimatedCost: '450.00',
+        customerId: userId,
+        contractorId: contractor.id,
+        status: 'pending' as const,
+      },
+      {
+        title: 'Living Room Ceiling Repair',
+        description: 'Fix water damage on the living room ceiling. There are visible water stains and some peeling paint. Need to patch, prime, and repaint the affected area.',
+        customerName: userName,
+        customerAddress: '123 Main Street, Anytown, USA',
+        customerPhone: '+1-555-0123',
+        appointmentDate: '2024-01-20',
+        estimatedCost: '300.00',
+        customerId: userId,
+        contractorId: contractor.id,
+        status: 'estimated' as const,
+      },
+      {
+        title: 'Bedroom Door Installation',
+        description: 'Install a new interior door for the master bedroom. The old door is damaged and needs replacement. Standard 32" x 80" door with hardware.',
+        customerName: userName,
+        customerAddress: '123 Main Street, Anytown, USA',
+        customerPhone: '+1-555-0123',
+        appointmentDate: '2024-01-25',
+        estimatedCost: '250.00',
+        customerId: userId,
+        contractorId: contractor.id,
+        status: 'pending' as const,
+      }
+    ]
+
+    // Insert all temporary jobs
+    const createdJobs = await db.insert(jobs).values(temporaryJobs).returning()
+    
+    console.log(`Created ${createdJobs.length} temporary jobs for user ${userName}`)
+    return createdJobs
+  } catch (error) {
+    console.error('Error creating temporary jobs:', error)
+    // Don't fail the signup if job creation fails
+    return []
+  }
+}
 
 // Register endpoint
 authRouter.post('/register', async (c) => {
@@ -39,6 +110,12 @@ authRouter.post('/register', async (c) => {
       role,
     }).returning()
 
+    // Create temporary jobs for customers
+    let temporaryJobs = []
+    if (role === 'customer') {
+      temporaryJobs = await createTemporaryJobs(newUser.id, newUser.name)
+    }
+
     // Generate JWT token
     const token = generateToken({
       userId: newUser.id,
@@ -54,7 +131,8 @@ authRouter.post('/register', async (c) => {
         name: newUser.name,
         email: newUser.email,
         role: newUser.role,
-      }
+      },
+      temporaryJobs: temporaryJobs.length > 0 ? temporaryJobs.length : undefined
     }, 201)
   } catch (error) {
     console.error('Registration error:', error)
