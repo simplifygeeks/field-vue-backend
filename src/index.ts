@@ -10,7 +10,7 @@ import vertexAiRouter from './routes/vertex-ai.js'
 import { existsSync, writeFileSync } from 'fs'
 
 // create a vertex-ai.json file in the root of the project if doesn't exist
-const vertexAiJsonPath = "./vertex-ai.json";
+const vertexAiJsonPath = "/tmp/vertex-ai.json";
 if (!existsSync(vertexAiJsonPath)) {
   // Write the original JSON string to preserve proper escaping
   writeFileSync(vertexAiJsonPath, process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON!);
