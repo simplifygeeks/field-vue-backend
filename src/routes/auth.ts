@@ -13,58 +13,74 @@ const authRouter = new Hono()
 // Function to create temporary jobs for new users
 async function createTemporaryJobs(userId: string, userName: string) {
   try {
-    // Find a contractor to assign jobs to (or create a default one)
-    let contractor = await db.query.users.findFirst({
-      where: (users, { eq }) => eq(users.role, 'contractor'),
+    // Find existing customers to assign jobs to (or create default ones)
+    let customers = await db.query.users.findMany({
+      where: (users, { eq }) => eq(users.role, 'customer'),
     })
 
-    // If no contractor exists, create a default one
-    if (!contractor) {
-      const [defaultContractor] = await db.insert(users).values({
-        name: 'Default Contractor',
-        email: 'contractor@example.com',
-        password: await hashPassword('temp123'), // Temporary password
-        role: 'contractor',
-      }).returning()
-      contractor = defaultContractor
+    // If no customers exist, create default ones
+    if (customers.length === 0) {
+      const defaultCustomers = [
+        {
+          name: 'John Smith',
+          email: 'john.smith@example.com',
+          password: await hashPassword('temp123'),
+          role: 'customer' as const,
+        },
+        {
+          name: 'Sarah Johnson',
+          email: 'sarah.johnson@example.com',
+          password: await hashPassword('temp123'),
+          role: 'customer' as const,
+        },
+        {
+          name: 'Mike Davis',
+          email: 'mike.davis@example.com',
+          password: await hashPassword('temp123'),
+          role: 'customer' as const,
+        }
+      ]
+
+      const createdCustomers = await db.insert(users).values(defaultCustomers).returning()
+      customers = createdCustomers
     }
 
-    // Create three temporary jobs
+    // Create three temporary jobs for the contractor
     const temporaryJobs = [
       {
         title: 'Kitchen Wall Painting',
         description: 'Paint the kitchen walls with a fresh coat. The walls are currently white and need to be painted in a light beige color. Area is approximately 200 sq ft.',
-        customerName: userName,
+        customerName: customers[0].name,
         customerAddress: '123 Main Street, Anytown, USA',
         customerPhone: '+1-555-0123',
         appointmentDate: '2024-01-15',
         estimatedCost: '450.00',
-        customerId: userId,
-        contractorId: contractor.id,
+        customerId: customers[0].id,
+        contractorId: userId,
         status: 'pending' as const,
       },
       {
         title: 'Living Room Ceiling Repair',
         description: 'Fix water damage on the living room ceiling. There are visible water stains and some peeling paint. Need to patch, prime, and repaint the affected area.',
-        customerName: userName,
-        customerAddress: '123 Main Street, Anytown, USA',
-        customerPhone: '+1-555-0123',
+        customerName: customers[1].name,
+        customerAddress: '456 Oak Avenue, Somewhere, USA',
+        customerPhone: '+1-555-0456',
         appointmentDate: '2024-01-20',
         estimatedCost: '300.00',
-        customerId: userId,
-        contractorId: contractor.id,
+        customerId: customers[1].id,
+        contractorId: userId,
         status: 'estimated' as const,
       },
       {
         title: 'Bedroom Door Installation',
         description: 'Install a new interior door for the master bedroom. The old door is damaged and needs replacement. Standard 32" x 80" door with hardware.',
-        customerName: userName,
-        customerAddress: '123 Main Street, Anytown, USA',
-        customerPhone: '+1-555-0123',
+        customerName: customers[2].name,
+        customerAddress: '789 Pine Road, Elsewhere, USA',
+        customerPhone: '+1-555-0789',
         appointmentDate: '2024-01-25',
         estimatedCost: '250.00',
-        customerId: userId,
-        contractorId: contractor.id,
+        customerId: customers[2].id,
+        contractorId: userId,
         status: 'pending' as const,
       }
     ]
@@ -72,7 +88,7 @@ async function createTemporaryJobs(userId: string, userName: string) {
     // Insert all temporary jobs
     const createdJobs = await db.insert(jobs).values(temporaryJobs).returning()
     
-    console.log(`Created ${createdJobs.length} temporary jobs for user ${userName}`)
+    console.log(`Created ${createdJobs.length} temporary jobs for contractor ${userName}`)
     return createdJobs
   } catch (error) {
     console.error('Error creating temporary jobs:', error)
@@ -110,9 +126,9 @@ authRouter.post('/register', async (c) => {
       role,
     }).returning()
 
-    // Create temporary jobs for customers
+    // Create temporary jobs for contractors
     let temporaryJobs = []
-    if (role === 'customer') {
+    if (role === 'contractor') {
       temporaryJobs = await createTemporaryJobs(newUser.id, newUser.name)
     }
 
