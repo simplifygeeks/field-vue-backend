@@ -127,10 +127,6 @@ authRouter.post('/register', async (c) => {
     }).returning()
 
     // Create temporary jobs for contractors
-    let temporaryJobs = []
-    if (role === 'contractor') {
-      temporaryJobs = await createTemporaryJobs(newUser.id, newUser.name)
-    }
 
     // Generate JWT token
     const token = generateToken({
@@ -148,7 +144,6 @@ authRouter.post('/register', async (c) => {
         email: newUser.email,
         role: newUser.role,
       },
-      temporaryJobs: temporaryJobs.length > 0 ? temporaryJobs.length : undefined
     }, 201)
   } catch (error) {
     console.error('Registration error:', error)

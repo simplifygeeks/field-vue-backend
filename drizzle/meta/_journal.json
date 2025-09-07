@@ -8,6 +8,55 @@
       "when": 1754064926397,
       "tag": "0000_married_excalibur",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1757175071337,
+      "tag": "0001_smiling_cyclops",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1757224838501,
+      "tag": "0002_puzzling_guardian",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1757226964786,
+      "tag": "0003_curvy_proteus",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1757230326415,
+      "tag": "0004_eminent_triton",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1757240921181,
+      "tag": "0005_curved_human_fly",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1757241215344,
+      "tag": "0006_left_shard",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1757241502734,
+      "tag": "0007_plain_silver_surfer",
+      "breakpoints": true
     }
   ]
 }

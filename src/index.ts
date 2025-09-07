@@ -7,6 +7,8 @@ import authRouter from './routes/auth.js'
 import jobsRouter from './routes/jobs.js'
 import { requireAuth } from './middleware/auth.js'
 import vertexAiRouter from './routes/vertex-ai.js'
+import uploadsRouter from './routes/uploads.js'
+import customersRouter from './routes/customers.js'
 import { existsSync, writeFileSync } from 'fs'
 
 // create a vertex-ai.json file in the root of the project if doesn't exist
@@ -26,6 +28,8 @@ app.route('/auth', authRouter)
 app.use('/jobs/*', requireAuth)
 app.route('/jobs', jobsRouter)
 app.route('/vertex-ai', vertexAiRouter)
+app.route('/uploads', uploadsRouter)
+app.route('/customers', customersRouter)
 
 
 

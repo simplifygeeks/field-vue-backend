@@ -1,0 +1,3 @@
+-- ALTER TABLE "jobs" ALTER COLUMN "id" SET DATA TYPE serial;--> statement-breakpoint
+-- ALTER TABLE "jobs" ALTER COLUMN "id" DROP DEFAULT;--> statement-breakpoint
+-- ALTER TABLE "rooms" ALTER COLUMN "job_id" SET DATA TYPE integer;
