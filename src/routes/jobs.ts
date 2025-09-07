@@ -52,12 +52,46 @@ jobsRouter.get("/", async (c: any) => {
         const contractor = await db.query.users.findFirst({
           where: (users, { eq }) => eq(users.id, job.contractorId),
         });
+
+        // Get rooms for this job
+        const jobRooms = await db.query.rooms.findMany({
+          where: (rooms, { eq }) => eq(rooms.jobId, job.id),
+          orderBy: (rooms, { asc }) => [asc(rooms.createdAt)],
+        });
+
+        const roomsResponse = jobRooms.map((r) => {
+          const imageUrls = Array.isArray(r.imageUrls)
+            ? (r.imageUrls as unknown as string[])
+            : [];
+          const measurements = (r.measurements as any) || null;
+          let aggregates =
+            measurements && typeof measurements === "object"
+              ? measurements.aggregates || null
+              : null;
+          // Reshape to expose only consolidated items and roomDimensions for UI
+          if (aggregates) {
+            const roomDimensions = aggregates.roomDimensions || null;
+            aggregates = { aggregates, roomDimensions };
+          }
+
+          return {
+            id: r.id,
+            name: r.name,
+            roomType: r.roomType,
+            imageUrls,
+            measurements: aggregates,
+            createdAt: r.createdAt,
+            updatedAt: r.updatedAt,
+          };
+        });
+
         
         return {
           ...job,
           title: job.title + job.jobNumber,
           customer,
           contractor,
+          rooms: roomsResponse,
         };
       })
     );
@@ -142,15 +176,62 @@ jobsRouter.get("/search", async (c: any) => {
     const field = (url.searchParams.get("field") || "title").trim();
     const term = (url.searchParams.get("term") || "").trim();
 
-    // Map field to column
+    // For customer/address searches, search in customers table first
+    if (field === "customer" || field === "customerName" || field === "address" || field === "customerAddress") {
+      let customerResults;
+      
+      if (term === "") {
+        // Get all customers that  this contractor has created
+        customerResults = await db.query.customers.findMany({
+          where: (customers, { eq }) => eq(customers.createdBy, user.id),
+        });
+      } else {
+        const pattern = `%${term}%`;
+        const customerColumn = field === "address" || field === "customerAddress" ? customers.address : customers.name;
+        
+        customerResults = await db.query.customers.findMany({
+          where: (customers, helpers) => helpers.and(helpers.ilike(customerColumn, pattern), helpers.eq(customers.createdBy,user.id)),
+        });
+      }
+
+      // For each customer, get their jobs with this contractor
+      const customersWithJobs = [];
+      for (const customer of customerResults) {
+        const customerJobs = await db.query.jobs.findMany({
+          where: (jobs, { and, eq }) => and(
+            eq(jobs.customerId, customer.id),
+            eq(jobs.contractorId, user.id)
+          ),
+          orderBy: (jobs, { desc }) => [desc(jobs.createdAt)],
+        });
+
+        customersWithJobs.push({
+          customer: customer,
+          jobs: customerJobs.map(job => ({
+            id: job.id,
+            jobNumber: job.jobNumber,
+            title: job.title + job.jobNumber,
+            status: job.status,
+            customerName: job.customerName,
+            customerAddress: job.customerAddress,
+            createdAt: job.createdAt,
+          }))
+        });
+      }
+
+      
+      return c.json({ 
+        count: customersWithJobs.length, 
+        customers: customersWithJobs,
+        searchType: "customer"
+      });
+    }
+
+    // For job searches, search in jobs table
     const fieldToColumn: Record<string, any> = {
       title: jobs.title,
       job: jobs.title,
       jobName: jobs.title,
-      customerName: jobs.customerName,
-      customer: jobs.customerName,
-      address: jobs.customerAddress,
-      customerAddress: jobs.customerAddress,
     };
     const column = fieldToColumn[field] || jobs.title;
 
@@ -172,9 +253,10 @@ jobsRouter.get("/search", async (c: any) => {
       });
     }
 
-    // Shape minimal response
+    // For job searches, return job data only
     const items = results.map((j) => ({
       id: j.id,
+      jobNumber: j.jobNumber,
       title: j.title + j.jobNumber,
       status: j.status,
       customerName: j.customerName,
@@ -182,7 +264,11 @@ jobsRouter.get("/search", async (c: any) => {
       createdAt: j.createdAt,
     }));
 
-    return c.json({ count: items.length, jobs: items });
+    return c.json({ 
+      count: items.length, 
+      jobs: items,
+      searchType: "job"
+    });
   } catch (error) {
     console.error("Search jobs error:", error);
     return c.json({ error: "Internal server error" }, 500);
@@ -251,6 +337,7 @@ jobsRouter.post("/", async (c: any) => {
       customerName, 
       customerAddress, 
       customerPhone, 
+      customerEmail,
       appointmentDate, 
       estimatedCost, 
       contractorId,
@@ -283,6 +370,10 @@ jobsRouter.post("/", async (c: any) => {
     if (!contractor) {
       return c.json({ error: "Contractor not found" }, 404);
     }
+
+    await db.insert(customers).values({
+      name: customerName,email: customerEmail, address: customerAddress,createdBy: user.id
+    })
 
     const [newJob] = await db
       .insert(jobs)
