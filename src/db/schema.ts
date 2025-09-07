@@ -44,6 +44,7 @@ export const jobs = pgTable('jobs', {
   customerPhone: varchar('customer_phone', { length: 20 }),
   appointmentDate: varchar('appointment_date', { length: 100 }),
   estimatedCost: decimal('estimated_cost', { precision: 10, scale: 2 }),
+  estimation: jsonb('estimation'),
   customerId: uuid('customer_id'),
   contractorId: uuid('contractor_id').references(() => users.id).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),

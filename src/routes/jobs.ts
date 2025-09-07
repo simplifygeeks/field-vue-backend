@@ -11,7 +11,7 @@ const jobsRouter = new Hono();
 jobsRouter.get("/", async (c: any) => {
   try {
     const user = c.get("user");
-
+    
     if (!user) {
       return c.json({ error: "Authentication required" }, 401);
     }
@@ -52,7 +52,7 @@ jobsRouter.get("/", async (c: any) => {
         const contractor = await db.query.users.findFirst({
           where: (users, { eq }) => eq(users.id, job.contractorId),
         });
-
+        
         return {
           ...job,
           title: job.title + job.jobNumber,
@@ -62,7 +62,7 @@ jobsRouter.get("/", async (c: any) => {
       })
     );
 
-    return c.json({
+    return c.json({ 
       jobs: jobsWithUsers,
       count: jobsWithUsers.length,
       user: {
@@ -194,7 +194,7 @@ jobsRouter.get("/:id", async (c: any) => {
   try {
     const user = c.get("user");
     const jobId = c.req.param("id");
-
+    
     if (!user) {
       return c.json({ error: "Authentication required" }, 401);
     }
@@ -208,7 +208,7 @@ jobsRouter.get("/:id", async (c: any) => {
     }
 
     // Check if user has access to this job
-    const hasAccess =
+    const hasAccess = 
       user.role === "admin" ||
       (user.role === "contractor" && job.contractorId === user.id) ||
       (user.role === "customer" && job.customerId === user.id);
@@ -228,7 +228,7 @@ jobsRouter.get("/:id", async (c: any) => {
       where: (users, { eq }) => eq(users.id, job.contractorId),
     });
 
-    return c.json({
+    return c.json({ 
       job: {
         ...job,
         customer,
@@ -245,17 +245,17 @@ jobsRouter.get("/:id", async (c: any) => {
 jobsRouter.post("/", async (c: any) => {
   try {
     const user = c.get("user");
-    const {
-      title,
-      description,
-      customerName,
-      customerAddress,
-      customerPhone,
-      appointmentDate,
-      estimatedCost,
+    const { 
+      title, 
+      description, 
+      customerName, 
+      customerAddress, 
+      customerPhone, 
+      appointmentDate, 
+      estimatedCost, 
       contractorId,
     } = await c.req.json();
-
+    
     if (!user) {
       return c.json({ error: "Authentication required" }, 401);
     }
@@ -276,7 +276,7 @@ jobsRouter.post("/", async (c: any) => {
 
     // Verify contractor exists
     const contractor = await db.query.users.findFirst({
-      where: (users, { eq, and }) =>
+      where: (users, { eq, and }) => 
         and(eq(users.id, contractorId), eq(users.role, "contractor")),
     });
 
@@ -287,15 +287,15 @@ jobsRouter.post("/", async (c: any) => {
     const [newJob] = await db
       .insert(jobs)
       .values({
-        title,
-        description,
-        customerName,
-        customerAddress,
-        customerPhone: customerPhone || null,
-        appointmentDate: appointmentDate || null,
-        estimatedCost: estimatedCost ? estimatedCost.toString() : null,
-        customerId: user.id,
-        contractorId,
+      title,
+      description,
+      customerName,
+      customerAddress,
+      customerPhone: customerPhone || null,
+      appointmentDate: appointmentDate || null,
+      estimatedCost: estimatedCost ? estimatedCost.toString() : null,
+      customerId: user.id,
+      contractorId,
         status: "pending",
       })
       .returning();
@@ -319,7 +319,7 @@ jobsRouter.patch("/:id/status", async (c: any) => {
     const user = c.get("user");
     const jobId = c.req.param("id");
     const { status } = await c.req.json();
-
+    
     if (!user) {
       return c.json({ error: "Authentication required" }, 401);
     }
@@ -346,7 +346,7 @@ jobsRouter.patch("/:id/status", async (c: any) => {
     }
 
     // Check if user can update this job
-    const canUpdate =
+    const canUpdate = 
       user.role === "admin" ||
       (user.role === "contractor" && job.contractorId === user.id) ||
       (user.role === "customer" && job.customerId === user.id);
@@ -357,14 +357,14 @@ jobsRouter.patch("/:id/status", async (c: any) => {
 
     const [updatedJob] = await db
       .update(jobs)
-      .set({
+      .set({ 
         status,
         updatedAt: new Date(),
       })
       .where(eq(jobs.id, jobId))
       .returning();
 
-    return c.json({
+    return c.json({ 
       message: "Job status updated successfully",
       job: updatedJob,
     });
@@ -380,7 +380,7 @@ jobsRouter.patch("/:id", async (c: any) => {
     const user = c.get("user");
     const jobId = c.req.param("id");
     const updateData = await c.req.json();
-
+    
     if (!user) {
       return c.json({ error: "Authentication required" }, 401);
     }
@@ -395,7 +395,7 @@ jobsRouter.patch("/:id", async (c: any) => {
     }
 
     // Check if user can update this job
-    const canUpdate =
+    const canUpdate = 
       user.role === "admin" ||
       (user.role === "contractor" && job.contractorId === user.id) ||
       (user.role === "customer" && job.customerId === user.id);
@@ -431,7 +431,7 @@ jobsRouter.patch("/:id", async (c: any) => {
       .where(eq(jobs.id, jobId))
       .returning();
 
-    return c.json({
+    return c.json({ 
       message: "Job updated successfully",
       job: updatedJob,
     });
@@ -666,6 +666,7 @@ jobsRouter.get("/:id/details", async (c: any) => {
       customerId: job.customerId,
       createdAt: job.createdAt,
       updatedAt: job.updatedAt,
+      estimate:job.estimation
     };
 
     return c.json({
@@ -739,6 +740,54 @@ jobsRouter.get("/photos", async (c: any) => {
     });
   } catch (error) {
     console.error("Get contractor photos error:", error);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+// Update job estimation data
+jobsRouter.patch("/:id/estimate", async (c: any) => {
+  try {
+    const user = c.get("user");
+    const jobId = c.req.param("id");
+
+
+    if (!user) return c.json({ error: "Authentication required" }, 401);
+
+    const job = await db.query.jobs.findFirst({
+      where: (jobs, { eq }) => eq(jobs.id, jobId),
+    });
+    if (!job) return c.json({ error: "Job not found" }, 404);
+
+    const hasAccess =
+      user.role === "admin" ||
+      (user.role === "contractor" && job.contractorId === user.id) ||
+      (user.role === "customer" && job.customerId === user.id);
+    if (!hasAccess) return c.json({ error: "Access denied" }, 403);
+
+    const estimationData = await c.req.json();
+
+    const [updatedJob] = await db
+      .update(jobs)
+      .set({ 
+        estimation: estimationData,
+        status: "estimated",
+        updatedAt: new Date(),
+      })
+      .where(eq(jobs.id, jobId))
+      .returning();
+
+    return c.json({
+      message: "Job estimation updated successfully",
+      job: {
+        id: updatedJob.id,
+        jobNumber: updatedJob.jobNumber,
+        title: updatedJob.title,
+        estimation: updatedJob.estimation,
+        updatedAt: updatedJob.updatedAt,
+      },
+    });
+  } catch (error) {
+    console.error("Update job estimation error:", error);
     return c.json({ error: "Internal server error" }, 500);
   }
 });
