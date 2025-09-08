@@ -64,6 +64,13 @@
       "when": 1757254582133,
       "tag": "0008_happy_goblin_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1757356039285,
+      "tag": "0009_sloppy_maria_hill",
+      "breakpoints": true
     }
   ]
 }

@@ -1,7 +1,7 @@
 import 'dotenv/config'
 import { db } from '../db/index.js'
-import { rooms } from '../db/schema.js'
-import { eq } from 'drizzle-orm'
+import { rooms, roomImages } from '../db/schema.js'
+import { eq, and } from 'drizzle-orm'
 
 const DETECTION_ENDPOINT = process.env.DETECTION_ENDPOINT!
 type CountsMap = Record<string, number>
@@ -22,7 +22,27 @@ function toNumber(value: unknown): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-async function callDetectionApi(imageUrl: string): Promise<any> {
+function getMaxReasonableCount(objectType: string): number {
+  const type = objectType.toLowerCase()
+  
+  // Define maximum reasonable counts per photo for each object type
+  const maxCounts: Record<string, number> = {
+    ceiling: 1,        // Only 1 ceiling visible per room photo
+    roof: 1,          // Only 1 roof section visible per exterior photo
+    wall: 4,          // Maximum 4 walls visible in a room photo
+    window: 6,         // Maximum 6 windows visible (unusual but possible)
+    door: 3,          // Maximum 3 doors visible (unusual but possible)
+    trim: 10,         // Multiple trim pieces possible
+    moulding: 10,     // Multiple moulding pieces possible
+    baseboard: 8,     // Multiple baseboard sections possible
+    railing: 3,       // Maximum 3 railing sections visible
+    gutter: 4,        // Maximum 4 gutter sections visible
+  }
+  
+  return maxCounts[type] || 5 // Default maximum of 5 for unknown types
+}
+
+async function callDetectionApi(imageUrl: string, roomType: string = 'interior'): Promise<any> {
   if (imageUrl.startsWith('gs://')) {
     throw new Error('Detection API requires HTTP-accessible image; got gs:// URI')
   }
@@ -45,18 +65,23 @@ async function callDetectionApi(imageUrl: string): Promise<any> {
   const fileName = urlPath.split('/').pop() || 'image'
   form.append('image', blob, fileName)
 
-  const resp = await fetch(`${DETECTION_ENDPOINT}/api/object-detection`, {
+  // Use our new AI endpoint instead of external Vercel endpoint
+  const baseUrl = process.env.API_BASE_URL || 'http://localhost:3000'
+  const resp = await fetch(`${baseUrl}/ai/object-detection?type=${roomType}`, {
     method: 'POST',
     body: form,
   })
   if (!resp.ok) {
-    console.log('rrr',resp)
-    throw new Error(`Detection API HTTP ${resp.status}`)
+    console.error('AI Detection API error:', resp.status, await resp.text())
+    throw new Error(`AI Detection API HTTP ${resp.status}`)
   }
-  return await resp.json()
+  const result = await resp.json()
+  
+  // Return the analysis object from our new API format
+  return result.analysis || result
 }
 
-export async function analyzeImagesForRoom(roomId: string, imageUrls: string[]): Promise<void> {
+export async function analyzeImagesForRoom(roomId: string, imageUrls: string[], roomType: string = 'interior'): Promise<void> {
   try {
     const perImage: Array<{ url: string; summary: { countsByType: CountsMap; areaSqftByType: CountsMap }; raw: any }> = []
     const totalCounts: CountsMap = {}
@@ -65,48 +90,91 @@ export async function analyzeImagesForRoom(roomId: string, imageUrls: string[]):
 
     for (const url of imageUrls) {
       try {
-        const json = await callDetectionApi(url)
+        const json = await callDetectionApi(url, roomType)
 
 
         // Per-image maps
         const countsByType: CountsMap = {}
         const areaSqftByType: CountsMap = {}
 
-        // objects[]
+        // Our new API returns objects[] directly
         if (Array.isArray(json?.objects)) {
+          // Track counts per type to validate realistic numbers
+          const typeCounts: Record<string, number> = {}
+          
           for (const obj of json.objects) {
+            // Only process high-confidence detections to avoid false positives
+            const confidence = obj?.confidence?.toLowerCase()
+            if (confidence !== 'high') {
+              console.log(`Skipping ${obj?.type || 'object'} with confidence: ${confidence}`)
+              continue
+            }
+            
             const key = normalizeType(obj?.type) || normalizeType(obj?.name) || 'object'
+            typeCounts[key] = (typeCounts[key] || 0) + 1
+            
+            // Validate realistic counts per photo
+            const currentCount = typeCounts[key]
+            const maxReasonableCount = getMaxReasonableCount(key)
+            
+            if (currentCount > maxReasonableCount) {
+              console.log(`Skipping ${key} #${currentCount} - exceeds reasonable count of ${maxReasonableCount}`)
+              continue
+            }
+            
             addToMap(countsByType, key, 1)
-            const w = toNumber(obj?.estimated_width_feet)
-            const h = toNumber(obj?.estimated_height_feet)
-            const area = w != null && h != null ? w * h : null
-            if (area != null) addToMap(areaSqftByType, key, area)
+            
+            // Use surface_area if available, otherwise calculate from width/height
+            const area = toNumber(obj?.surface_area)
+            if (area != null) {
+              addToMap(areaSqftByType, key, area)
+            } else {
+              const w = toNumber(obj?.estimated_width_feet)
+              const h = toNumber(obj?.estimated_height_feet)
+              const calculatedArea = w != null && h != null ? w * h : null
+              if (calculatedArea != null) addToMap(areaSqftByType, key, calculatedArea)
+            }
           }
         }
 
-        // architectural_elements {}
-        const ae = json?.architectural_elements || {}
-        for (const category of Object.keys(ae)) {
-          const items = Array.isArray(ae[category]) ? ae[category] : []
-          for (const it of items) {
-            const key = normalizeType(category) || 'architectural'
-            addToMap(countsByType, key, 1)
-            const area = toNumber(it?.surface_area)
-            if (area != null) addToMap(areaSqftByType, key, area)
-            const w = toNumber(it?.estimated_width_feet)
-            const h = toNumber(it?.estimated_height_feet)
-            const whArea = w != null && h != null ? w * h : null
-            if (whArea != null) addToMap(areaSqftByType, key, whArea)
-          }
-        }
-
-        // room_dimensions
+        // Our new API doesn't have architectural_elements, everything is in objects[]
+        // But we can still check for room_dimensions if they exist
         if (json?.room_dimensions) {
           roomDimensions = {
             estimated_width: toNumber(json.room_dimensions.estimated_width) ?? roomDimensions.estimated_width ?? null,
             estimated_height: toNumber(json.room_dimensions.estimated_height) ?? roomDimensions.estimated_height ?? null,
             estimated_length: toNumber(json.room_dimensions.estimated_length) ?? roomDimensions.estimated_length ?? null,
           }
+        }
+
+        // Store individual image measurements in roomImages table
+        const imageMeasurements = {
+          processedAt: new Date().toISOString(),
+          objects: json?.objects || [],
+          scene: json?.scene || '',
+          summary: json?.summary || '',
+          countsByType,
+          areaSqftByType,
+          roomDimensions: json?.room_dimensions || null,
+        }
+
+        // Insert or update room image record
+        try {
+          await db.insert(roomImages).values({
+            roomId,
+            imageUrl: url,
+            measurements: imageMeasurements,
+            processedAt: new Date(),
+          })
+        } catch (error) {
+          // If record exists, update it
+          await db.update(roomImages)
+            .set({
+              measurements: imageMeasurements,
+              processedAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .where(and(eq(roomImages.roomId, roomId), eq(roomImages.imageUrl, url)))
         }
 
         // Push per-image
@@ -145,7 +213,8 @@ export async function analyzeImagesForRoom(roomId: string, imageUrls: string[]):
         roomDimensions,
       },
       model: {
-        endpoint: DETECTION_ENDPOINT,
+        endpoint: 'internal-ai-object-detection',
+        type: roomType,
       },
     }
 

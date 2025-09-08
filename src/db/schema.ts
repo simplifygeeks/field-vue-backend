@@ -63,15 +63,42 @@ export const rooms = pgTable('rooms', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
+// Room Images table (stores individual image measurements)
+export const roomImages = pgTable('room_images', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  roomId: uuid('room_id').references(() => rooms.id).notNull(),
+  imageUrl: text('image_url').notNull(),
+  measurements: jsonb('measurements'), // individual image measurements
+  processedAt: timestamp('processed_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
 // Define relationships
 export const usersRelations = relations(users, ({ many }) => ({
   contractorJobs: many(jobs, { relationName: 'contractor' }),
 }))
 
-export const jobsRelations = relations(jobs, ({ one }) => ({
+export const jobsRelations = relations(jobs, ({ one, many }) => ({
   contractor: one(users, {
     fields: [jobs.contractorId],
     references: [users.id],
     relationName: 'contractor',
+  }),
+  rooms: many(rooms),
+}))
+
+export const roomsRelations = relations(rooms, ({ one, many }) => ({
+  job: one(jobs, {
+    fields: [rooms.jobId],
+    references: [jobs.id],
+  }),
+  images: many(roomImages),
+}))
+
+export const roomImagesRelations = relations(roomImages, ({ one }) => ({
+  room: one(rooms, {
+    fields: [roomImages.roomId],
+    references: [rooms.id],
   }),
 })) 

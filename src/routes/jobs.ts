@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { db } from "../db/index.js";
-import { jobs, users, rooms, customers } from "../db/schema.js";
+import { jobs, users, rooms, customers, roomImages } from "../db/schema.js";
 import { eq, or, inArray, ilike, and } from "drizzle-orm";
 import { uploadBuffer } from "../lib/storage.js";
 import { analyzeImagesForRoom } from "../lib/detections.js";
@@ -532,6 +532,50 @@ jobsRouter.patch("/:id", async (c: any) => {
   }
 });
 
+// Get individual image measurements for a room
+jobsRouter.get("/:id/rooms/:roomId/images", async (c: any) => {
+  try {
+    const user = c.get("user");
+    if (!user) return c.json({ error: "Authentication required" }, 401);
+
+    const jobId = c.req.param("id");
+    const roomId = c.req.param("roomId");
+
+    // Verify job belongs to contractor
+    const job = await db.query.jobs.findFirst({
+      where: (jobs, { and, eq }) => and(
+        eq(jobs.id, jobId),
+        eq(jobs.contractorId, user.id)
+      ),
+    });
+
+    if (!job) {
+      return c.json({ error: "Job not found or access denied" }, 404);
+    }
+
+    // Get room images with measurements
+    const images = await db.query.roomImages.findMany({
+      where: (roomImages, { eq }) => eq(roomImages.roomId, roomId),
+      orderBy: (roomImages, { desc }) => [desc(roomImages.createdAt)],
+    });
+
+    return c.json({
+      roomId,
+      images: images.map(img => ({
+        id: img.id,
+        imageUrl: img.imageUrl,
+        measurements: img.measurements,
+        processedAt: img.processedAt,
+        createdAt: img.createdAt,
+        updatedAt: img.updatedAt,
+      })),
+    });
+  } catch (error) {
+    console.error("Get room images error:", error);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
 export default jobsRouter;
 
 // Create a new job with rooms and upload images (multipart/form-data)
@@ -667,7 +711,7 @@ jobsRouter.post("/create-with-rooms", async (c: any) => {
       // Fire-and-forget background analysis per room
       if (uploadedUrls.length > 0) {
         // Do not await: background task
-        analyzeImagesForRoom(updatedRoom.id, uploadedUrls).catch(() => {});
+        analyzeImagesForRoom(updatedRoom.id, uploadedUrls, roomType).catch(() => {});
       }
     }
 
@@ -717,7 +761,7 @@ jobsRouter.get("/:id/details", async (c: any) => {
       orderBy: (rooms, { asc }) => [asc(rooms.createdAt)],
     });
 
-    const roomsResponse = jobRooms.map((r) => {
+    const roomsResponse = await Promise.all(jobRooms.map(async (r) => {
       const imageUrls = Array.isArray(r.imageUrls)
         ? (r.imageUrls as unknown as string[])
         : [];
@@ -732,16 +776,32 @@ jobsRouter.get("/:id/details", async (c: any) => {
         aggregates = { aggregates, roomDimensions };
       }
 
+      // Fetch individual image measurements
+      const roomImages = await db.query.roomImages.findMany({
+        where: (roomImages, { eq }) => eq(roomImages.roomId, r.id),
+        orderBy: (roomImages, { asc }) => [asc(roomImages.createdAt)],
+      });
+
+      const imageMeasurements = roomImages.map(img => ({
+        id: img.id,
+        imageUrl: img.imageUrl,
+        measurements: img.measurements,
+        processedAt: img.processedAt,
+        createdAt: img.createdAt,
+        updatedAt: img.updatedAt,
+      }));
+
       return {
         id: r.id,
         name: r.name,
         roomType: r.roomType,
         imageUrls,
-        measurements: aggregates,
+        measurements: aggregates, // Keep existing aggregated measurements
+        imageMeasurements, // Add new image-wise measurements
         createdAt: r.createdAt,
         updatedAt: r.updatedAt,
       };
-    });
+    }));
 
     const jobResponse = {
       id: job.id,
@@ -920,77 +980,119 @@ jobsRouter.patch("/:id/details", async (c: any) => {
       });
       if (!roomRow) continue;
 
-      const existing = (roomRow.measurements as any) || {};
-      const existingAggregates = (existing.aggregates as any) || {};
+      // Check if this is image-wise measurements or legacy room-level measurements
+      if (rp?.imageMeasurements && Array.isArray(rp.imageMeasurements)) {
+        // Handle image-wise measurements - update individual image records
+        const imageMeasurements = rp.imageMeasurements;
+        
+        for (const imageData of imageMeasurements) {
+          if (!imageData.id || !imageData.imageUrl) continue;
 
-      // Accept shape: { aggregates: { items: [...] } } or directly { items: [...] }
-      const aggInput = rp?.aggregates || rp;
-      const itemsInput = Array.isArray(aggInput?.items) ? aggInput.items : [];
-      const roomDimensionsInput = aggInput?.roomDimensions;
+          // Update the image measurement record in roomImages table
+          await db.update(roomImages)
+            .set({
+              measurements: imageData.measurements,
+              updatedAt: new Date(),
+            })
+            .where(and(
+              eq(roomImages.roomId, roomId),
+              eq(roomImages.imageUrl, imageData.imageUrl)
+            ));
+        }
 
-      // Normalize items
-      type Item = {
-        type: string;
-        count?: number;
-        sqft?: number;
-        selected?: boolean;
-      };
-      const normalizedItems: Item[] = [];
-      const countsByType: Record<string, number> = {};
-      const areaSqftByType: Record<string, number> = {};
+        // Get the updated room data for response
+        const [updated] = await db
+          .update(rooms)
+          .set({ updatedAt: new Date() })
+          .where(eq(rooms.id, roomRow.id))
+          .returning();
 
-      for (const it of itemsInput) {
-        if (!it || typeof it !== "object") continue;
-        const type = String(it.type || "").trim();
-        if (!type) continue;
-        const count = Number.isFinite(Number(it.count)) ? Number(it.count) : 0;
-        const sqft = Number.isFinite(Number(it.sqft)) ? Number(it.sqft) : 0;
-        const selected =
-          typeof it.selected === "boolean"
-            ? it.selected
-            : (undefined as boolean | undefined);
-        normalizedItems.push({ type, count, sqft, selected });
-        countsByType[type] = (countsByType[type] || 0) + count;
-        areaSqftByType[type] = (areaSqftByType[type] || 0) + sqft;
+        updatedRooms.push({
+          id: updated.id,
+          name: updated.name,
+          roomType: updated.roomType,
+          imageUrls: Array.isArray(updated.imageUrls)
+            ? (updated.imageUrls as unknown as string[])
+            : [],
+          measurements: updated.measurements,
+          createdAt: updated.createdAt,
+          updatedAt: updated.updatedAt,
+        });
+
+      } else {
+        // Handle legacy room-level measurements (existing logic)
+        const existing = (roomRow.measurements as any) || {};
+        const existingAggregates = (existing.aggregates as any) || {};
+
+        // Accept shape: { aggregates: { items: [...] } } or directly { items: [...] }
+        const aggInput = rp?.aggregates || rp;
+        const itemsInput = Array.isArray(aggInput?.items) ? aggInput.items : [];
+        const roomDimensionsInput = aggInput?.roomDimensions;
+
+        // Normalize items
+        type Item = {
+          type: string;
+          count?: number;
+          sqft?: number;
+          selected?: boolean;
+        };
+        const normalizedItems: Item[] = [];
+        const countsByType: Record<string, number> = {};
+        const areaSqftByType: Record<string, number> = {};
+
+        for (const it of itemsInput) {
+          if (!it || typeof it !== "object") continue;
+          const type = String(it.type || "").trim();
+          if (!type) continue;
+          const count = Number.isFinite(Number(it.count)) ? Number(it.count) : 0;
+          const sqft = Number.isFinite(Number(it.sqft)) ? Number(it.sqft) : 0;
+          const selected =
+            typeof it.selected === "boolean"
+              ? it.selected
+              : (undefined as boolean | undefined);
+          normalizedItems.push({ type, count, sqft, selected });
+          countsByType[type] = (countsByType[type] || 0) + count;
+          areaSqftByType[type] = (areaSqftByType[type] || 0) + sqft;
+        }
+
+        const newAggregates = {
+          ...existingAggregates,
+          items: normalizedItems,
+          countsByType,
+          areaSqftByType,
+          roomDimensions:
+            roomDimensionsInput ?? existingAggregates.roomDimensions ?? null,
+        };
+
+        const newMeasurements = {
+          ...existing,
+          aggregates: newAggregates,
+        };
+
+        const [updated] = await db
+          .update(rooms)
+          .set({ measurements: newMeasurements, updatedAt: new Date() })
+          .where(eq(rooms.id, roomRow.id))
+          .returning();
+
+        // Shape response to match details endpoint
+        const shapedAggregates = {
+          items: newAggregates.items,
+          roomDimensions: newAggregates.roomDimensions,
+        };
+
+        updatedRooms.push({
+          id: updated.id,
+          name: updated.name,
+          roomType: updated.roomType,
+          imageUrls: Array.isArray(updated.imageUrls)
+            ? (updated.imageUrls as unknown as string[])
+            : [],
+          measurements: shapedAggregates,
+          createdAt: updated.createdAt,
+          updatedAt: updated.updatedAt,
+        });
       }
-
-      const newAggregates = {
-        ...existingAggregates,
-        items: normalizedItems,
-        countsByType,
-        areaSqftByType,
-        roomDimensions:
-          roomDimensionsInput ?? existingAggregates.roomDimensions ?? null,
-      };
-
-      const newMeasurements = {
-        ...existing,
-        aggregates: newAggregates,
-      };
-
-      const [updated] = await db
-        .update(rooms)
-        .set({ measurements: newMeasurements, updatedAt: new Date() })
-        .where(eq(rooms.id, roomRow.id))
-        .returning();
-
-      // Shape response to match details endpoint
-      const shapedAggregates = {
-        items: newAggregates.items,
-        roomDimensions: newAggregates.roomDimensions,
-      };
-
-      updatedRooms.push({
-        id: updated.id,
-        name: updated.name,
-        roomType: updated.roomType,
-        imageUrls: Array.isArray(updated.imageUrls)
-          ? (updated.imageUrls as unknown as string[])
-          : [],
-        measurements: shapedAggregates,
-        createdAt: updated.createdAt,
-        updatedAt: updated.updatedAt,
-      });
     }
 
     return c.json({
