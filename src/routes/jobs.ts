@@ -576,6 +576,160 @@ jobsRouter.get("/:id/rooms/:roomId/images", async (c: any) => {
   }
 });
 
+// Delete a specific room image
+jobsRouter.delete("/:jobId/rooms/:roomId/images/:imageId", async (c: any) => {
+  try {
+    const user = c.get("user");
+    if (!user) return c.json({ error: "Authentication required" }, 401);
+
+    const jobId = c.req.param("jobId");
+    const roomId = c.req.param("roomId");
+    const imageId = c.req.param("imageId");
+
+    // Verify job exists and user has access
+    const job = await db.query.jobs.findFirst({
+      where: (jobs, { eq }) => eq(jobs.id, jobId),
+    });
+
+    if (!job) {
+      return c.json({ error: "Job not found" }, 404);
+    }
+
+    // Check access permissions
+    const hasAccess =
+      user.role === "admin" ||
+      (user.role === "contractor" && job.contractorId === user.id) ||
+      (user.role === "customer" && job.customerId === user.id);
+
+    if (!hasAccess) {
+      return c.json({ error: "Access denied" }, 403);
+    }
+
+    // Verify room belongs to the job
+    const room = await db.query.rooms.findFirst({
+      where: (rooms, { and, eq }) => and(
+        eq(rooms.id, roomId),
+        eq(rooms.jobId, jobId)
+      ),
+    });
+
+    if (!room) {
+      return c.json({ error: "Room not found in this job" }, 404);
+    }
+
+    // Verify image belongs to the room
+    const roomImage = await db.query.roomImages.findFirst({
+      where: (roomImages, { and, eq }) => and(
+        eq(roomImages.id, imageId),
+        eq(roomImages.roomId, roomId)
+      ),
+    });
+
+    if (!roomImage) {
+      return c.json({ error: "Image not found in this room" }, 404);
+    }
+
+    // Delete the specific image
+    await db.delete(roomImages).where(eq(roomImages.id, imageId));
+
+    // Check if this was the only image in the room
+    const remainingImages = await db.query.roomImages.findMany({
+      where: (roomImages, { eq }) => eq(roomImages.roomId, roomId),
+    });
+
+    let response: any = {
+      message: "Image deleted successfully",
+      deletedImage: {
+        id: roomImage.id,
+        imageUrl: roomImage.imageUrl,
+      },
+    };
+
+    // If no images left, delete the entire room
+    if (remainingImages.length === 0) {
+      await db.delete(rooms).where(eq(rooms.id, roomId));
+      
+      response = {
+        message: "Image deleted successfully. Room also deleted as it had no remaining images.",
+        deletedImage: {
+          id: roomImage.id,
+          imageUrl: roomImage.imageUrl,
+        },
+        deletedRoom: {
+          id: room.id,
+          name: room.name,
+          roomType: room.roomType,
+        },
+      };
+    }
+
+    return c.json(response);
+  } catch (error) {
+    console.error("Delete room image error:", error);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+// Delete a specific room from a job
+jobsRouter.delete("/:jobId/rooms/:roomId", async (c: any) => {
+  try {
+    const user = c.get("user");
+    if (!user) return c.json({ error: "Authentication required" }, 401);
+
+    const jobId = c.req.param("jobId");
+    const roomId = c.req.param("roomId");
+
+    // Verify job exists and user has access
+    const job = await db.query.jobs.findFirst({
+      where: (jobs, { eq }) => eq(jobs.id, jobId),
+    });
+
+    if (!job) {
+      return c.json({ error: "Job not found" }, 404);
+    }
+
+    // Check access permissions
+    const hasAccess =
+      user.role === "admin" ||
+      (user.role === "contractor" && job.contractorId === user.id) ||
+      (user.role === "customer" && job.customerId === user.id);
+
+    if (!hasAccess) {
+      return c.json({ error: "Access denied" }, 403);
+    }
+
+    // Verify room belongs to the job
+    const room = await db.query.rooms.findFirst({
+      where: (rooms, { and, eq }) => and(
+        eq(rooms.id, roomId),
+        eq(rooms.jobId, jobId)
+      ),
+    });
+
+    if (!room) {
+      return c.json({ error: "Room not found in this job" }, 404);
+    }
+
+    // Delete associated room images first (cascade delete)
+    await db.delete(roomImages).where(eq(roomImages.roomId, roomId));
+
+    // Delete the room
+    await db.delete(rooms).where(eq(rooms.id, roomId));
+
+    return c.json({
+      message: "Room deleted successfully",
+      deletedRoom: {
+        id: room.id,
+        name: room.name,
+        roomType: room.roomType,
+      },
+    });
+  } catch (error) {
+    console.error("Delete room error:", error);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
 export default jobsRouter;
 
 // Create a new job with rooms and upload images (multipart/form-data)
