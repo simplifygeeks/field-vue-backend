@@ -40,7 +40,7 @@ jobsRouter.get("/", async (c: any) => {
       return c.json({ error: "Invalid user role" }, 400);
     }
 
-    // Get user and customer details for each job
+    // Get user and customer details for each job, filtering for jobs with room images
     const jobsWithUsers = await Promise.all(
       userJobs.map(async (job) => {
         const customer = job.customerId
@@ -96,9 +96,12 @@ jobsRouter.get("/", async (c: any) => {
       })
     );
 
+    // Filter out null values (jobs without room images)
+    const filteredJobs = jobsWithUsers.filter(job => job !== null);
+
     return c.json({ 
-      jobs: jobsWithUsers,
-      count: jobsWithUsers.length,
+      jobs: filteredJobs,
+      count: filteredJobs.length,
       user: {
         id: user.id,
         role: user.role,
@@ -628,6 +631,19 @@ jobsRouter.delete("/:jobId/rooms/:roomId/images/:imageId", async (c: any) => {
     if (!roomImage) {
       return c.json({ error: "Image not found in this room" }, 404);
     }
+
+    // Remove the image URL from the room's imageUrls array
+    const currentImageUrls = Array.isArray(room.imageUrls) 
+      ? (room.imageUrls as unknown as string[]) 
+      : [];
+    const updatedImageUrls = currentImageUrls.filter(url => url !== roomImage.imageUrl);
+    
+    await db.update(rooms)
+      .set({ 
+        imageUrls: updatedImageUrls,
+        updatedAt: new Date()
+      })
+      .where(eq(rooms.id, roomId));
 
     // Delete the specific image
     await db.delete(roomImages).where(eq(roomImages.id, imageId));
