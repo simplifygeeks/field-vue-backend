@@ -1,10 +1,11 @@
 import { Hono } from 'hono'
+import { eq } from 'drizzle-orm'
 import { db } from '../db/index.js'
 import { users, jobs } from '../db/schema.js'
-import { 
-  hashPassword, 
-  comparePassword, 
-  generateToken, 
+import {
+  hashPassword,
+  comparePassword,
+  generateToken,
   verifyToken
 } from '../auth/config.js'
 
@@ -225,11 +226,49 @@ authRouter.post('/logout', async (c) => {
   }
 })
 
+// Forgot password endpoint
+authRouter.post('/forgot-password', async (c) => {
+  try {
+    const { email, newPassword } = await c.req.json()
+
+    if (!email || !newPassword) {
+      return c.json({ error: 'Email and new password are required' }, 400)
+    }
+
+    // Find user by email
+    const user = await db.query.users.findFirst({
+      where: (users, { eq }) => eq(users.email, email),
+    })
+
+    if (!user) {
+      return c.json({ error: 'User with this email does not exist' }, 404)
+    }
+
+    // Hash the new password
+    const hashedPassword = await hashPassword(newPassword)
+
+    // Update user's password in database
+    await db.update(users)
+      .set({
+        password: hashedPassword,
+        updatedAt: new Date()
+      })
+      .where(eq(users.email, email))
+
+    return c.json({
+      message: 'Password updated successfully'
+    })
+  } catch (error) {
+    console.error('Forgot password error:', error)
+    return c.json({ error: 'Internal server error' }, 500)
+  }
+})
+
 // Get current user
 authRouter.get('/me', async (c) => {
   try {
     const authHeader = c.req.header('Authorization')
-    
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return c.json({ error: 'No token provided' }, 401)
     }
@@ -250,7 +289,7 @@ authRouter.get('/me', async (c) => {
       return c.json({ error: 'User not found' }, 404)
     }
 
-    return c.json({ 
+    return c.json({
       user: {
         id: user.id,
         name: user.name,
