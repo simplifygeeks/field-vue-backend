@@ -71,6 +71,13 @@
       "when": 1757356039285,
       "tag": "0009_sloppy_maria_hill",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1759420778205,
+      "tag": "0010_tired_strong_guy",
+      "breakpoints": true
     }
   ]
 }

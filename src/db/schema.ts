@@ -59,6 +59,8 @@ export const rooms = pgTable('rooms', {
   roomType: text('room_type').default("interior"), // 'interior' | 'exterior'
   imageUrls: jsonb('image_urls'), // array of image URL strings
   measurements: jsonb('measurements'), // arbitrary JSON for counts/areas/overrides
+  customService: jsonb('custom_service'), // { description: string, cost: string }
+  deduction: jsonb('deduction'), // { description: string, amount: string }
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })

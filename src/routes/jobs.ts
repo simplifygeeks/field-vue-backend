@@ -970,6 +970,8 @@ jobsRouter.get("/:id/details", async (c: any) => {
         imageUrls,
         measurements: aggregates, // Keep existing aggregated measurements
         imageMeasurements, // Add new image-wise measurements
+        customService: r.customService,
+        deduction: r.deduction,
         createdAt: r.createdAt,
         updatedAt: r.updatedAt,
       };
@@ -1187,6 +1189,8 @@ jobsRouter.patch("/:id/details", async (c: any) => {
             ? (updated.imageUrls as unknown as string[])
             : [],
           measurements: updated.measurements,
+          customService: updated.customService,
+          deduction: updated.deduction,
           createdAt: updated.createdAt,
           updatedAt: updated.updatedAt,
         });
@@ -1241,9 +1245,22 @@ jobsRouter.patch("/:id/details", async (c: any) => {
           aggregates: newAggregates,
         };
 
+        // Handle customService and deduction fields
+        const updateFields: any = {
+          measurements: newMeasurements,
+          updatedAt: new Date()
+        };
+
+        if (rp?.customService !== undefined) {
+          updateFields.customService = rp.customService;
+        }
+        if (rp?.deduction !== undefined) {
+          updateFields.deduction = rp.deduction;
+        }
+
         const [updated] = await db
           .update(rooms)
-          .set({ measurements: newMeasurements, updatedAt: new Date() })
+          .set(updateFields)
           .where(eq(rooms.id, roomRow.id))
           .returning();
 
@@ -1261,6 +1278,8 @@ jobsRouter.patch("/:id/details", async (c: any) => {
             ? (updated.imageUrls as unknown as string[])
             : [],
           measurements: shapedAggregates,
+          customService: updated.customService,
+          deduction: updated.deduction,
           createdAt: updated.createdAt,
           updatedAt: updated.updatedAt,
         });
