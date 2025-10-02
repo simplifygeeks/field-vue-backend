@@ -752,7 +752,6 @@ export default jobsRouter;
 jobsRouter.post("/create-with-rooms", async (c: any) => {
   try {
     const user = c.get("user");
-    console.log("came here");
     if (!user) return c.json({ error: "Authentication required" }, 401);
     if (user.role !== "contractor")
       return c.json(
@@ -850,10 +849,10 @@ jobsRouter.post("/create-with-rooms", async (c: any) => {
         })
         .returning();
 
-      const uploadedUrls: string[] = [];
-      for (const key of imageKeys) {
+      // Batch upload images in parallel for this room
+      const uploadPromises = imageKeys.map(async (key) => {
         const f = form.get(key);
-        if (!f || typeof f === "string") continue;
+        if (!f || typeof f === "string") return null;
         const blob = f as File | Blob;
         const buf = Buffer.from(await blob.arrayBuffer());
         const contentType = (blob as any).type || "application/octet-stream";
@@ -866,8 +865,11 @@ jobsRouter.post("/create-with-rooms", async (c: any) => {
           contentType,
           makePublic: true,
         });
-        uploadedUrls.push(publicUrl || gcsUri);
-      }
+        return publicUrl || gcsUri;
+      });
+
+      const uploadResults = await Promise.all(uploadPromises);
+      const uploadedUrls = uploadResults.filter((url): url is string => url !== null);
 
       // Update room with image URLs if any
       const [updatedRoom] = await db
@@ -1154,7 +1156,7 @@ jobsRouter.patch("/:id/details", async (c: any) => {
       if (rp?.imageMeasurements && Array.isArray(rp.imageMeasurements)) {
         // Handle image-wise measurements - update individual image records
         const imageMeasurements = rp.imageMeasurements;
-        
+
         for (const imageData of imageMeasurements) {
           if (!imageData.id || !imageData.imageUrl) continue;
 
@@ -1271,6 +1273,119 @@ jobsRouter.patch("/:id/details", async (c: any) => {
     });
   } catch (error) {
     console.error("Patch job details error:", error);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+// Add a new room with images to an existing job
+jobsRouter.post("/:id/add-room", async (c: any) => {
+  try {
+    const user = c.get("user");
+    const jobId = c.req.param("id");
+
+    if (!user) return c.json({ error: "Authentication required" }, 401);
+    if (user.role !== "contractor")
+      return c.json({ error: "Only contractors can add rooms to jobs" }, 403);
+
+    // Verify job exists and user has access
+    const job = await db.query.jobs.findFirst({
+      where: (jobs, { and, eq }) =>
+        and(eq(jobs.id, jobId), eq(jobs.contractorId, user.id)),
+    });
+
+    if (!job) {
+      return c.json({ error: "Job not found or access denied" }, 404);
+    }
+
+    const form = await c.req.formData();
+    const roomDataField = form.get("room");
+
+    if (typeof roomDataField !== "string") {
+      return c.json({ error: "room must be a JSON string" }, 400);
+    }
+
+    const roomData = JSON.parse(roomDataField);
+    const { name, roomType } = roomData;
+
+    if (!name) {
+      return c.json({ error: "Room name is required" }, 400);
+    }
+
+    // Create room first
+    const [newRoom] = await db
+      .insert(rooms)
+      .values({
+        jobId: jobId,
+        name: name,
+        roomType: roomType || "interior",
+        imageUrls: JSON.parse("[]"),
+        measurements: null,
+      })
+      .returning();
+
+    const imageKeys: string[] = [];
+
+    // Extract image keys from form data
+    for (const [key] of form.entries()) {
+      if (key.startsWith("image")) {
+        imageKeys.push(key);
+      }
+    }
+
+    // Batch upload all images in parallel
+    const uploadPromises = imageKeys.map(async (key) => {
+      const f = form.get(key);
+      if (!f || typeof f === "string") return null;
+      const blob = f as File | Blob;
+      const buf = Buffer.from(await blob.arrayBuffer());
+      const contentType = (blob as any).type || "application/octet-stream";
+      const ext = contentType.split("/")[1] || "bin";
+      const now = new Date().toISOString().replace(/[:.]/g, "-");
+      const dest = `uploads/${user.id}/${jobId}/${newRoom.id}/${now}-${Math.random()
+        .toString(36)
+        .slice(2)}.${ext}`;
+      const { publicUrl, gcsUri } = await uploadBuffer(buf, dest, {
+        contentType,
+        makePublic: true,
+      });
+      return publicUrl || gcsUri;
+    });
+
+    const uploadResults = await Promise.all(uploadPromises);
+    const uploadedUrls = uploadResults.filter((url): url is string => url !== null);
+
+    // Update room with image URLs if any
+    const [updatedRoom] = await db
+      .update(rooms)
+      .set({ imageUrls: uploadedUrls, updatedAt: new Date() })
+      .where(eq(rooms.id, newRoom.id))
+      .returning();
+
+    // Fire-and-forget background analysis for the images
+    if (uploadedUrls.length > 0) {
+      const roomTypeValue = roomType || "interior";
+      analyzeImagesForRoom(newRoom.id, uploadedUrls, roomTypeValue).catch(() => {});
+    }
+
+    return c.json(
+      {
+        message: "Room created and images uploaded successfully",
+        room: {
+          id: updatedRoom.id,
+          name: updatedRoom.name,
+          roomType: updatedRoom.roomType,
+          imageUrls: Array.isArray(updatedRoom.imageUrls)
+            ? (updatedRoom.imageUrls as unknown as string[])
+            : [],
+          createdAt: updatedRoom.createdAt,
+          updatedAt: updatedRoom.updatedAt,
+        },
+        uploadedImages: uploadedUrls,
+      },
+      201
+    );
+  } catch (error) {
+    console.error("Add room to job error:", error);
     return c.json({ error: "Internal server error" }, 500);
   }
 });
