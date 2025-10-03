@@ -1177,7 +1177,7 @@ jobsRouter.patch("/:id/details", async (c: any) => {
         // Get the updated room data for response
         const [updated] = await db
           .update(rooms)
-          .set({ updatedAt: new Date() })
+          .set({ updatedAt: new Date(), customService: rp.customService, deduction: rp.deduction })
           .where(eq(rooms.id, roomRow.id))
           .returning();
 
