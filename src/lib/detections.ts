@@ -103,36 +103,34 @@ export async function analyzeImagesForRoom(roomId: string, imageUrls: string[], 
           const typeCounts: Record<string, number> = {}
           
           for (const obj of json.objects) {
-            // Only process high-confidence detections to avoid false positives
+            // Accept high confidence by default; allow medium for siding/brick to improve recall
             const confidence = obj?.confidence?.toLowerCase()
-            if (confidence !== 'high') {
-              console.log(`Skipping ${obj?.type || 'object'} with confidence: ${confidence}`)
+            let typeKey = normalizeType(obj?.type) || normalizeType(obj?.name) || 'object'
+            // Canonicalize common synonyms/mislabels for exterior
+            if (typeKey === 'wall' || typeKey === 'cladding') typeKey = 'siding'
+            if (typeKey === 'masonry' || typeKey === 'foundation' || typeKey === 'masonry_foundation' || typeKey === 'brick_foundation') typeKey = 'brick'
+            const isBrickOrSiding = typeKey === 'brick' || typeKey === 'siding'
+            if (!(confidence === 'high' || (isBrickOrSiding && confidence === 'medium'))) {
+              console.log(`Skipping ${typeKey} with confidence: ${confidence}`)
               continue
             }
+
+            typeCounts[typeKey] = (typeCounts[typeKey] || 0) + 1
             
-            const key = normalizeType(obj?.type) || normalizeType(obj?.name) || 'object'
-            typeCounts[key] = (typeCounts[key] || 0) + 1
+            // For exterior, do not enforce a max per-photo count cap
+            // (User requested removing reasonable count restriction for exterior)
             
-            // Validate realistic counts per photo
-            const currentCount = typeCounts[key]
-            const maxReasonableCount = getMaxReasonableCount(key)
-            
-            if (currentCount > maxReasonableCount) {
-              console.log(`Skipping ${key} #${currentCount} - exceeds reasonable count of ${maxReasonableCount}`)
-              continue
-            }
-            
-            addToMap(countsByType, key, 1)
+            addToMap(countsByType, typeKey, 1)
             
             // Use surface_area if available, otherwise calculate from width/height
             const area = toNumber(obj?.surface_area)
             if (area != null) {
-              addToMap(areaSqftByType, key, area)
+              addToMap(areaSqftByType, typeKey, area)
             } else {
               const w = toNumber(obj?.estimated_width_feet)
               const h = toNumber(obj?.estimated_height_feet)
               const calculatedArea = w != null && h != null ? w * h : null
-              if (calculatedArea != null) addToMap(areaSqftByType, key, calculatedArea)
+              if (calculatedArea != null) addToMap(areaSqftByType, typeKey, calculatedArea)
             }
           }
         }
