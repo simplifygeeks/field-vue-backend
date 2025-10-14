@@ -194,13 +194,14 @@ Respond ONLY as JSON in this exact format:
 }`,
 
       exterior: `You are a FieldVue AI assistant specialized in PRECISE exterior analysis.
-IDENTIFY ONLY these four object types when they are clearly visible. Map any synonyms to the exact type name in parentheses:
+IDENTIFY ONLY these five object types when they are clearly visible. Map any synonyms to the exact type name in parentheses:
 
 ALLOWED OBJECT TYPES (exact type names for output):
 - Siding (type: "siding")
 - Window (type: "window")
 - Door (type: "door")
 - Brick / Masonry Foundation (type: "brick")
+- Railing (type: "railing")
 
 CRITICAL ACCURACY REQUIREMENTS:
 - ONLY identify objects that are DEFINITIVELY present and clearly visible.
@@ -236,6 +237,15 @@ DEFINITIONS, VISUAL CUES, AND STRICT RULES:
 - Exclude: Full-height brick veneer walls, brick chimneys, porch/stoop steps, walkways/patios, planters, freestanding or retaining walls not attached to the house wall, stone columns, pavers.
 - Bounding box: Anchor to ground/grade line where visible; keep within the bottom portion of the wall. Do NOT extend above the transition/ledge where siding starts; do NOT include adjacent steps, stoops, or separate masonry structures. As a rule of thumb, limit height to a realistic foundation band (generally less than ~35% of total wall height in the image unless clearly a raised foundation). Prefer the box top aligned with the siding-to-masonry transition and the box bottom aligned with the ground/grade.
 - Counting: Count each continuous foundation segment along a wall as one brick object.
+
+5) RAILING (type: "railing")
+- Also known as: handrail, guardrail, balustrade, deck railing, porch railing, stair railing.
+- Definition: A protective barrier system typically consisting of vertical posts (balusters/spindles), horizontal rails (top rail and bottom rail), and a handrail, installed along stairs, porches, decks, balconies, or elevated platforms.
+- Visual cues: Repeating vertical balusters or spindles with consistent spacing; horizontal top rail and/or bottom rail; handrail for gripping; posts at intervals; often made of wood, metal (wrought iron, aluminum), vinyl, or composite materials; typically 36-42 inches in height.
+- Include: Only exterior railings attached to porches, decks, stairs, balconies, or elevated platforms that are clearly visible.
+- Exclude: Interior railings, fences not attached to the structure, decorative metalwork that is not a railing, window grilles, shutters, arbors, trellises.
+- Bounding box: Cover the entire visible railing section including posts, balusters, and rails; do NOT include the deck/porch floor or stairs themselves unless they are part of the railing structure.
+- Counting: Count each distinct railing section separately (e.g., porch railing and stair railing are separate objects).
 
 WHAT NOT TO IDENTIFY (COMMON FALSE POSITIVES):
 - Roofs, gutters, downspouts, fascia, soffits, corner trim, vents, lights, cameras, shutters, house numbers, mailboxes, landscaping, vehicles, reflections, shadows, lines.
@@ -277,7 +287,7 @@ OUTPUT FORMAT (JSON ONLY):
         "width": percentage_of_image_width,
         "height": percentage_of_image_height
       },
-      "type": "siding/window/door/brick",
+      "type": "siding/window/door/brick/railing",
       "estimated_width_feet": number,
       "estimated_height_feet": number,
       "surface_area": number
