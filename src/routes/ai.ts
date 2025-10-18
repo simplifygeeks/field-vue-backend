@@ -200,7 +200,7 @@ ALLOWED OBJECT TYPES (exact type names for output):
 - Siding (type: "siding")
 - Window (type: "window")
 - Door (type: "door")
-- Brick / Masonry Foundation (type: "brick")
+- Foundation (type: "foundation")
 - Railing (type: "railing")
 
 CRITICAL ACCURACY REQUIREMENTS:
@@ -228,15 +228,71 @@ DEFINITIONS, VISUAL CUES, AND STRICT RULES:
 - Exclude open doorways without a door, storm/screen doors alone, or shadows.
 - Count each individual door separately.
 
-4) BRICK / MASONRY FOUNDATION (type: "brick")
-- Also known as: foundation brick, water table brick, masonry skirt, brick base, CMU/concrete foundation, stem wall.
-- Definition: The continuous horizontal band at the BASE of exterior walls (near ground/grade) made of brick, CMU blocks, or concrete with brick pattern/veneer. It typically supports the wall above and is directly below the siding or wall cladding. Classification directive: If a brick/CMU foundation band is visible at the base, you MUST output an object of type "brick" for it, even if the band is narrow. Do NOT label this band as "wall" or "siding".
-- Visual cues: Horizontal courses of brick with mortar joints (running bond); occasional weep holes near the top course; a ledge/cap (water table) where siding or sheathing begins; CMU block pattern (large rectangular blocks with mortar joints); continuous band that follows the base of the house, sometimes stepping with the grade; often adjacent to soil/grass/driveway at its bottom edge.
-- Typical vertical extent: About 8–32 inches (roughly 1–4 brick courses or a short CMU/concrete band). It should occupy ONLY the lower portion of the wall.
-- Include: Only the visible foundation/masonry band directly attached to and supporting the house wall at the bottom.
-- Exclude: Full-height brick veneer walls, brick chimneys, porch/stoop steps, walkways/patios, planters, freestanding or retaining walls not attached to the house wall, stone columns, pavers.
-- Bounding box: Anchor to ground/grade line where visible; keep within the bottom portion of the wall. Do NOT extend above the transition/ledge where siding starts; do NOT include adjacent steps, stoops, or separate masonry structures. As a rule of thumb, limit height to a realistic foundation band (generally less than ~35% of total wall height in the image unless clearly a raised foundation). Prefer the box top aligned with the siding-to-masonry transition and the box bottom aligned with the ground/grade.
-- Counting: Count each continuous foundation segment along a wall as one brick object.
+4) FOUNDATION (type: "foundation")
+- MANDATORY DETECTION: You MUST always check for and identify foundation elements. This is a CRITICAL component that should NEVER be missed.
+- Also known as: foundation brick, water table brick, masonry skirt, brick base, CMU/concrete foundation, stem wall, foundation wall, brick foundation, block foundation, concrete base, masonry foundation, foundation band, foundation veneer.
+- Definition: The continuous horizontal structural band at the VERY BOTTOM of exterior walls (at or near ground level/grade) that serves as the base support for the structure above. This is typically made of brick, CMU (concrete masonry units/cinder blocks), poured concrete, or stone masonry. It sits directly below the main wall cladding (siding) and is the transition point between the ground and the elevated structure.
+- CRITICAL CLASSIFICATION DIRECTIVE: If ANY foundation material is visible at the base of the wall—even a single row of brick, a narrow CMU band, or a concrete strip—you MUST output an object of type "foundation" for it. NEVER skip foundations. NEVER label foundation elements as "wall" or "siding". Foundation detection takes PRIORITY over other identifications.
+- Visual cues to ALWAYS look for (check ALL of these):
+  * Horizontal courses of red/orange/brown brick with white/gray mortar joints (running bond, stack bond, or other brick patterns)
+  * Gray CMU blocks (concrete blocks) with rectangular pattern and visible mortar lines—typically 8"×16" blocks
+  * Solid poured concrete band (may be smooth, textured, or painted)
+  * Stone masonry with irregular or cut stone pattern
+  * Change in material at the base where siding/cladding begins above
+  * A horizontal ledge, cap, or water table where the foundation meets the wall above
+  * Weep holes (small rectangular holes) near the top of brick foundations for moisture drainage
+  * Different texture/color at the bottom of the wall compared to siding above
+  * Vertical expansion joints or control joints in concrete/CMU
+  * Mortar joints that create a grid pattern (brick or block)
+  * Adjacent to soil, grass, mulch, gravel, driveway, or walkway at the bottom edge
+  * May have a slight outward projection from the wall above
+  * Often darker or weathered due to ground proximity
+  * May have efflorescence (white mineral deposits) from moisture
+  * Foundation typically starts at ground level and extends 8-36 inches upward
+  * Look for the transition line where one material (foundation) meets another (siding)
+- Typical characteristics:
+  * Vertical extent: About 8–36 inches (roughly 1–6 brick courses, 1–3 CMU courses, or equivalent concrete/stone band)
+  * Occupies ONLY the lower portion of the wall (bottom 10-35% of visible wall height)
+  * Continuous horizontal band that follows the perimeter of the building
+  * May step up or down to follow grade/slope of the ground
+  * Usually same material all around the building perimeter
+  * Typically 8-12 inches thick (depth from exterior face)
+- WHAT TO INCLUDE (be generous with identification):
+  * ANY visible foundation/masonry band directly attached to and supporting the house wall at the bottom
+  * Even a single visible row of brick or block at the base—still counts as foundation
+  * Partial foundation views where only a section is visible—still identify it
+  * Foundations that are partially obscured by landscaping—identify the visible portion
+  * Painted or stained foundation materials—still foundation
+  * Foundations with attached lattice or skirting on porches—identify the foundation behind it
+- WHAT TO EXCLUDE:
+  * Full-height brick veneer walls (if brick extends to roofline, it's the main wall, not foundation)
+  * Brick chimneys (freestanding vertical structures)
+  * Porch steps, stoop steps, or entry stairs (separate from foundation wall)
+  * Walkways, patios, or driveways (horizontal surfaces on the ground)
+  * Planters, flower boxes, or garden beds
+  * Freestanding or retaining walls not attached to the house wall
+  * Stone columns or pillars (vertical supports)
+  * Pavers or decorative stonework not part of the structural foundation
+- Bounding box rules (be precise):
+  * BOTTOM of box: Align with the visible ground/grade line, soil line, or lowest visible foundation edge
+  * TOP of box: Align with the transition point where foundation material ends and siding/cladding begins (look for the ledge, water table, or material change)
+  * LEFT/RIGHT of box: Extend to the corners/edges of the continuous foundation band on that wall plane
+  * Do NOT extend above the foundation-to-siding transition line
+  * Do NOT include adjacent steps, stoops, porches, or separate masonry structures
+  * Do NOT include siding, trim, or other materials above the foundation
+  * Height guideline: Generally less than ~35% of total wall height in the image (unless clearly a raised foundation or walkout basement)
+  * Position guideline: Foundation box should typically occupy the lower half of the image (y > ~45-50%)
+- Counting rules:
+  * Count each continuous foundation segment visible along a wall plane as ONE foundation object
+  * If foundation wraps around a corner and both sides are visible, count as TWO separate foundation objects (one per wall plane)
+  * If there are clear breaks or separations (e.g., garage foundation vs. house foundation), count separately
+- DETECTION CHECKLIST (ask yourself these questions):
+  1. Is there ANY material at the very bottom of the wall that looks different from the siding above?
+  2. Can I see brick, block, concrete, or stone at the base near the ground?
+  3. Is there a horizontal line or ledge where one material transitions to another?
+  4. Is there a change in color, texture, or pattern at the base of the wall?
+  5. Do I see mortar joints, brick patterns, or block patterns at the bottom?
+  6. If YES to any of the above: Output type "foundation" immediately.
 
 5) RAILING (type: "railing")
 - Also known as: handrail, guardrail, balustrade, deck railing, porch railing, stair railing.
@@ -250,14 +306,16 @@ DEFINITIONS, VISUAL CUES, AND STRICT RULES:
 WHAT NOT TO IDENTIFY (COMMON FALSE POSITIVES):
 - Roofs, gutters, downspouts, fascia, soffits, corner trim, vents, lights, cameras, shutters, house numbers, mailboxes, landscaping, vehicles, reflections, shadows, lines.
 - Decorative brick/stone that is NOT the foundation band; steps/walkways/patios; chimneys; freestanding/retaining walls not attached to the house.
+- BUT REMEMBER: Any brick, block, or concrete AT THE BASE of the wall IS foundation and MUST be identified.
 
 BOUNDING BOX SANITY RULES:
 - Siding: Must not overlap roof, soffit, fascia, or extend over windows/doors/trim.
-- Brick foundation: Must be at the base of the wall and below the siding transition; avoid including steps, stoops, or separate masonry. Prefer the lower half of the image for the brick box (y > ~45%) and keep height small relative to full image (typically 5–35%), unless clearly a raised foundation.
+- Foundation: Must be at the base of the wall and below the siding transition; avoid including steps, stoops, or separate masonry. Prefer the lower half of the image for the foundation box (y > ~45%) and keep height small relative to full image (typically 5–35%), unless clearly a raised foundation. ALWAYS check for foundation presence at the base of walls.
 
 CLASSIFICATION SANITY RULES:
 - Do NOT output type "wall" for any exterior cladding; use type "siding" for wall cladding above the foundation band.
-- When siding is present above a brick/CMU foundation band, output TWO separate objects: one "brick" for the band and one "siding" for the cladding above. Do not merge them into a single object.
+- When siding is present above a foundation band, output TWO separate objects: one "foundation" for the band and one "siding" for the cladding above. Do not merge them into a single object.
+- MANDATORY: Always scan the base of walls for foundation material. If present, it MUST be identified as type "foundation".
 
 DIMENSION ESTIMATION (only when clearly measurable):
 1. ZOOM LEVEL (Current zoom: ${zoom}x):
@@ -287,7 +345,7 @@ OUTPUT FORMAT (JSON ONLY):
         "width": percentage_of_image_width,
         "height": percentage_of_image_height
       },
-      "type": "siding/window/door/brick/railing",
+      "type": "siding/window/door/foundation/railing",
       "estimated_width_feet": number,
       "estimated_height_feet": number,
       "surface_area": number
