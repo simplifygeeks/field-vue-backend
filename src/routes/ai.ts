@@ -208,15 +208,40 @@ CRITICAL ACCURACY REQUIREMENTS:
 - DO NOT guess or infer hidden parts; prefer omission over false positives.
 - COUNT ONLY WHAT YOU CAN ACTUALLY SEE.
 
+CRITICAL EXCEPTION - SIDING AND FOUNDATION ARE MANDATORY:
+- Siding and foundation are the PRIMARY objects we need from exterior images.
+- Missing siding or foundation is a CRITICAL FAILURE.
+- If you see a house exterior wall, you MUST detect siding (unless the ENTIRE wall is clearly full-height brick/stucco from ground to roof with zero siding visible).
+- Default assumption: ALL exterior walls have siding unless definitively proven otherwise.
+
 DEFINITIONS, VISUAL CUES, AND STRICT RULES:
 
 1) SIDING (type: "siding")
-- Also known as: clapboard, lap siding, vinyl siding, wood siding, fiber-cement (Hardie), board-and-batten, shingle siding, metal panels.
-- Visual cues: Repeating horizontal boards with small overlaps (lap/clapboard), vertical wide boards with narrow battens covering seams (board-and-batten), uniform shingles, or panel seams; consistent texture across a wall plane; corner trim/transition at wall edges; J-channels or casings around windows/doors.
-- Include: Only exterior wall cladding surfaces ABOVE the foundation.
-- Exclude: Brick/stone veneer, stucco, bare sheathing, foundation concrete/CMU, soffits, fascia, trim/corner boards, gutters/downspouts, porch ceilings.
-- Bounding box: Cover only the siding surface on that wall plane; do NOT include windows, doors, trim, soffits, fascia, gutters, or roof surfaces.
-- Counting: Count each distinct wall plane or clearly separated siding section as one siding object.
+- MANDATORY PRIORITY: Siding detection is CRITICAL. You MUST identify siding on every visible wall plane above the foundation.
+- SIMPLE RULE: If you see a wall surface above the foundation, identify it as siding. Foundation is at the bottom (typically bottom 8-36 inches); everything above it is siding.
+- Also known as: clapboard, lap siding, vinyl siding, wood siding, fiber-cement (Hardie), board-and-batten, shingle siding, metal panels, wall cladding, exterior wall covering.
+- Visual cues (ANY of these means siding is present):
+  * Repeating horizontal boards with small overlaps (lap/clapboard)
+  * Vertical wide boards with narrow battens covering seams (board-and-batten)
+  * Uniform shingles, or panel seams
+  * Consistent texture or pattern across a wall plane
+  * Corner trim/transition at wall edges
+  * J-channels or casings around windows/doors
+  * Horizontal or vertical lines indicating board/panel edges
+  * ANY visible wall surface material above the foundation
+  * Painted or colored wall surfaces
+- WHEN TO DETECT SIDING (follow these rules strictly):
+  * If foundation is detected: ALWAYS detect siding above it - no exceptions
+  * If windows/doors are detected: ALWAYS detect siding on that wall plane around them
+  * If you see a wall surface above ground level: ALWAYS detect siding unless the ENTIRE wall from foundation to roofline is clearly brick/stucco with zero siding visible
+  * If uncertain whether it's siding: Output siding anyway (default to siding)
+- Include: ALL exterior wall cladding surfaces ABOVE the foundation. Siding behind railings, columns, partial occlusions. Siding that coexists with brick/stone accents. Painted surfaces. Any wall material you cannot definitively identify as non-siding.
+- Exclude ONLY these (very strict - must be 100% certain):
+  * Full-height brick/stone veneer wall from foundation to roofline with ZERO siding visible anywhere
+  * Full-height stucco wall from foundation to roof with zero siding visible
+  * Foundation band itself (bottom portion only)
+- Bounding box: Cover the siding surface on that wall plane above foundation; start at foundation transition line, extend to below roof/soffit. Do NOT include windows, doors, trim, soffits, fascia, gutters, or roof surfaces in the box itself, but siding must be present around these elements.
+- Counting: Count each distinct wall plane as one siding object. If you see front and side walls, count both separately.
 
 2) WINDOW (type: "window")
 - Must see frame AND glass; clearly recognizable opening.
@@ -230,6 +255,7 @@ DEFINITIONS, VISUAL CUES, AND STRICT RULES:
 
 4) FOUNDATION (type: "foundation")
 - MANDATORY DETECTION: You MUST always check for and identify foundation elements. This is a CRITICAL component that should NEVER be missed.
+- CRITICAL: If you detect foundation, you MUST ALSO detect siding above it. They always appear together.
 - Also known as: foundation brick, water table brick, masonry skirt, brick base, CMU/concrete foundation, stem wall, foundation wall, brick foundation, block foundation, concrete base, masonry foundation, foundation band, foundation veneer.
 - Definition: The continuous horizontal structural band at the VERY BOTTOM of exterior walls (at or near ground level/grade) that serves as the base support for the structure above. This is typically made of brick, CMU (concrete masonry units/cinder blocks), poured concrete, or stone masonry. It sits directly below the main wall cladding (siding) and is the transition point between the ground and the elevated structure.
 - CRITICAL CLASSIFICATION DIRECTIVE: If ANY foundation material is visible at the base of the wall—even a single row of brick, a narrow CMU band, or a concrete strip—you MUST output an object of type "foundation" for it. NEVER skip foundations. NEVER label foundation elements as "wall" or "siding". Foundation detection takes PRIORITY over other identifications.
@@ -316,6 +342,17 @@ CLASSIFICATION SANITY RULES:
 - Do NOT output type "wall" for any exterior cladding; use type "siding" for wall cladding above the foundation band.
 - When siding is present above a foundation band, output TWO separate objects: one "foundation" for the band and one "siding" for the cladding above. Do not merge them into a single object.
 - MANDATORY: Always scan the base of walls for foundation material. If present, it MUST be identified as type "foundation".
+- If foundation is detected, siding MUST ALSO be detected above it. Never return foundation without siding.
+- If windows or doors are detected, siding MUST be detected on that wall plane.
+
+PRE-RESPONSE VALIDATION CHECKLIST (answer these BEFORE outputting JSON):
+1. Did I detect any foundation objects? → If YES, did I also detect siding above each foundation? If NO siding detected, ADD SIDING NOW.
+2. Did I detect any windows or doors? → If YES, did I detect siding on that wall plane? If NO siding detected, ADD SIDING NOW.
+3. Do I see any wall surfaces above ground level? → If YES, did I detect siding? If NO siding detected, ADD SIDING NOW.
+4. Is my siding count zero? → If YES, re-examine the image for wall surfaces and ADD SIDING unless the entire visible wall is clearly full-height brick/stucco from ground to roof.
+5. For each visible wall plane (front, side, etc.), do I have a siding object? → If NO for any plane, ADD SIDING NOW.
+
+CRITICAL: Before outputting your JSON response, verify that siding objects exist for all wall surfaces above foundation level. If siding count is zero and walls are visible, you have made an error - add siding objects.
 
 DIMENSION ESTIMATION (only when clearly measurable):
 1. ZOOM LEVEL (Current zoom: ${zoom}x):
@@ -332,6 +369,14 @@ CONFIDENCE LEVELS:
 - "high": Completely visible and clearly identifiable
 - "medium": Mostly visible; minor occlusions
 - "low": Partially visible or identification uncertain
+
+FINAL REMINDER BEFORE RESPONDING:
+- SIDING is the MOST IMPORTANT object type for exterior images
+- If you see a house/building exterior with walls, you MUST detect siding (unless entire wall is full-height brick/stucco)
+- If you detected foundation, you MUST detect siding above it
+- If you detected windows/doors, you MUST detect siding on that wall
+- DO NOT return a response with zero siding objects when walls are visible
+- Missing siding is a CRITICAL ERROR - always include siding when wall surfaces are present
 
 OUTPUT FORMAT (JSON ONLY):
 {
