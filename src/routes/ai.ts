@@ -194,6 +194,15 @@ Respond ONLY as JSON in this exact format:
 }`,
 
       exterior: `You are a FieldVue AI assistant specialized in PRECISE exterior analysis.
+
+STEP-BY-STEP ANALYSIS PROCESS (follow this exact order for EVERY image):
+1. SCAN FOR FOUNDATION: Look at the bottom of walls near ground level. Is there brick, concrete, CMU, or stone at the base? If YES, mark foundation for identification.
+2. SCAN FOR SIDING: Look at wall surfaces above the foundation. Is there wall cladding (boards, panels, shingles, painted surfaces)? If YES, mark siding for identification.
+3. VERIFY CONSISTENCY: If foundation was marked, ensure siding is also marked above it. If windows/doors are present, ensure siding is marked on that wall plane.
+4. SCAN FOR OTHER OBJECTS: Look for windows (frame + glass), doors (panel + frame), railings (posts + balusters).
+5. CREATE BOUNDING BOXES: For each marked object, draw bounding box and estimate dimensions.
+6. FINAL CHECK: Is siding count > 0 when walls are visible? Is foundation count > 0 when base is visible? If NO to either, re-examine.
+
 IDENTIFY ONLY these five object types when they are clearly visible. Map any synonyms to the exact type name in parentheses:
 
 ALLOWED OBJECT TYPES (exact type names for output):
@@ -370,6 +379,35 @@ CONFIDENCE LEVELS:
 - "medium": Mostly visible; minor occlusions
 - "low": Partially visible or identification uncertain
 
+ANALYSIS METHODOLOGY FOR CONSISTENCY:
+Follow these steps IN ORDER to ensure consistent results every time:
+
+STEP 1 - FOUNDATION SCAN (always do this first):
+- Look at the bottom 35% of the image near ground level
+- Identify any brick, CMU blocks, concrete, or stone material at the base
+- If found, prepare to output a "foundation" object
+- Note the top edge of foundation (where it transitions to siding)
+
+STEP 2 - SIDING SCAN (always do this second):
+- Look at wall surfaces ABOVE where foundation ends (or above ground if no foundation)
+- Look for ANY wall cladding: boards, panels, shingles, painted surfaces, textured surfaces
+- If ANY wall surface is visible above foundation level, prepare to output a "siding" object
+- Default assumption: it IS siding unless the ENTIRE wall is clearly brick/stucco from ground to roof
+
+STEP 3 - CONSISTENCY CHECK:
+- Foundation detected? → MUST also detect siding above it
+- Windows/doors detected? → MUST also detect siding on that wall
+- Wall visible but siding count = 0? → ERROR: Add siding now
+
+STEP 4 - OTHER OBJECTS:
+- Scan for windows (frame + glass visible)
+- Scan for doors (panel + frame visible)
+- Scan for railings (posts + balusters visible)
+
+STEP 5 - BOUNDING BOXES:
+- Draw boxes for each identified object
+- Estimate dimensions if edges are clear
+
 FINAL REMINDER BEFORE RESPONDING:
 - SIDING is the MOST IMPORTANT object type for exterior images
 - If you see a house/building exterior with walls, you MUST detect siding (unless entire wall is full-height brick/stucco)
@@ -377,6 +415,7 @@ FINAL REMINDER BEFORE RESPONDING:
 - If you detected windows/doors, you MUST detect siding on that wall
 - DO NOT return a response with zero siding objects when walls are visible
 - Missing siding is a CRITICAL ERROR - always include siding when wall surfaces are present
+- Follow the 5-step methodology above for CONSISTENT results every time
 
 OUTPUT FORMAT (JSON ONLY):
 {
@@ -404,8 +443,12 @@ OUTPUT FORMAT (JSON ONLY):
     const filePart = { inlineData: { data: base64Image, mimeType } };
     const textPart = { text: prompts[type as keyof typeof prompts] };
 
+    // Use balanced generation config for consistent yet flexible results
     const request = {
       contents: [{ role: "user", parts: [textPart, filePart] }],
+      generationConfig: {
+        temperature: 0.3,  // Balanced: consistent but allows some flexibility for image variations
+      },
     };
 
     const result = await generativeVisionModel.generateContent(request);
