@@ -220,8 +220,10 @@ CRITICAL ACCURACY REQUIREMENTS:
 CRITICAL EXCEPTION - SIDING AND FOUNDATION ARE MANDATORY:
 - Siding and foundation are the PRIMARY objects we need from exterior images.
 - Missing siding or foundation is a CRITICAL FAILURE.
-- If you see a house exterior wall, you MUST detect siding (unless the ENTIRE wall is clearly full-height brick/stucco from ground to roof with zero siding visible).
+- If you see a house exterior wall, you MUST detect siding - NO EXCEPTIONS. Even brick walls should be detected as siding.
 - Default assumption: ALL exterior walls have siding unless definitively proven otherwise.
+- BRICK WALLS ARE SIDING: Even full-height brick walls should be output as "siding", not as "foundation" or excluded.
+- Simple clear walls MUST always be detected as siding.
 
 DEFINITIONS, VISUAL CUES, AND STRICT RULES:
 
@@ -231,7 +233,9 @@ DEFINITIONS, VISUAL CUES, AND STRICT RULES:
 - SIMPLE RULE: Wall surface above foundation = SIDING. Always. Foundation is at the bottom (typically bottom 8-36 inches); everything above it is siding.
 - CONFIDENCE RULE FOR SIDING: When uncertain, ALWAYS use "low" confidence and output siding rather than skipping it. Missing siding is worse than low-confidence siding.
 
-- Also known as: clapboard, lap siding, vinyl siding, wood siding, fiber-cement (Hardie), board-and-batten, shingle siding, metal panels, wall cladding, exterior wall covering, house siding, exterior panels.
+- Also known as: clapboard, lap siding, vinyl siding, wood siding, fiber-cement (Hardie), board-and-batten, shingle siding, metal panels, wall cladding, exterior wall covering, house siding, exterior panels, brick walls, masonry walls.
+
+- CRITICAL: BRICK WALLS ARE SIDING - If you see brick walls (full-height brick or brick above foundation), output them as type "siding", NOT as "foundation". Only brick at the very bottom foundation band should be "foundation". Brick walls themselves are siding.
 
 - Visual cues (if you see ANY of these, output siding IMMEDIATELY):
   * Repeating horizontal boards with small overlaps (lap/clapboard) - classic siding
@@ -247,12 +251,15 @@ DEFINITIONS, VISUAL CUES, AND STRICT RULES:
   * Textured surfaces on walls - likely siding
   * Wall surfaces between windows - this is siding
   * Wall surfaces around doors - this is siding
-  * ANY material that's not clearly brick/stucco - treat as siding
+  * Brick walls (full-height brick or brick above foundation) - OUTPUT AS SIDING
+  * ANY wall material above ground level - treat as siding unless it's clearly ONLY a foundation band
 
 - MANDATORY DETECTION RULES (follow these strictly, NO EXCEPTIONS):
   * If foundation is detected: ALWAYS detect siding above it - output siding with "low" confidence minimum
   * If windows/doors are detected: ALWAYS detect siding on that wall plane around them - no exceptions
-  * If you see ANY wall surface above ground level: ALWAYS detect siding unless the ENTIRE wall from foundation to roofline is clearly full-height brick/stucco with ZERO siding visible
+  * If you see ANY wall surface above ground level: ALWAYS detect siding - NO EXCEPTIONS
+  * If you see brick walls (full-height or above foundation): Output as "siding", NOT as "foundation"
+  * If you see simple clear walls: ALWAYS output as siding (even if details are unclear)
   * If uncertain whether it's siding: Output siding with "low" confidence (better to detect with low confidence than miss it)
   * If you cannot identify the wall material: Default to siding with "low" or "medium" confidence
   * If the wall is painted and you can't see details: Output siding with "medium" confidence
@@ -263,22 +270,26 @@ DEFINITIONS, VISUAL CUES, AND STRICT RULES:
   * The wall has a texture or pattern - OUTPUT SIDING
   * The wall is painted a solid color - OUTPUT SIDING (painted siding)
   * You can see boards, panels, or shingles - OUTPUT SIDING
+  * You can see brick walls (full-height or above foundation) - OUTPUT AS SIDING
+  * Simple clear walls are visible - OUTPUT SIDING (even if details are unclear)
   * The wall exists above the foundation - OUTPUT SIDING (default assumption)
 
 - Include (be EXTREMELY GENEROUS - when in doubt, include):
   * ALL exterior wall cladding surfaces ABOVE the foundation (this is the default)
   * Siding behind railings, columns, partial occlusions (output even if partially hidden)
   * Siding that coexists with brick/stone accents (output siding portions)
+  * Brick walls (full-height brick or brick above foundation) - OUTPUT AS SIDING
   * Painted surfaces (almost always siding underneath)
   * Smooth wall surfaces (likely siding, output with medium/low confidence)
+  * Simple clear walls - ALWAYS output as siding (even if you can't see details)
   * Any wall material you cannot definitively identify as non-siding (default to siding)
   * Walls in shadow or poor lighting (output siding with low confidence)
   * Walls partially obscured by landscaping (output visible siding portions)
 
 - Exclude ONLY these (must be 100% ABSOLUTELY CERTAIN - if ANY doubt, output siding):
-  * Full-height brick/stone veneer wall from foundation to roofline with ZERO siding visible anywhere (entire wall is brick/stone)
+  * Foundation band itself (bottom portion only - below the transition line, typically bottom 8-36 inches)
   * Full-height stucco wall from foundation to roof with zero siding visible (entire wall is smooth stucco)
-  * Foundation band itself (bottom portion only - below the transition line)
+  * NOTE: Even full-height brick walls should be output as SIDING, not excluded
   * IF YOU ARE NOT 100% CERTAIN IT'S ONE OF THESE, OUTPUT SIDING
 
 - Confidence levels for siding (use these generously):
@@ -397,11 +408,13 @@ PRE-RESPONSE VALIDATION CHECKLIST (answer these BEFORE outputting JSON):
 1. Did I detect any foundation objects? → If YES, did I also detect siding above each foundation? If NO siding detected, ADD SIDING NOW (use "low" confidence if uncertain).
 2. Did I detect any windows or doors? → If YES, did I detect siding on that wall plane? If NO siding detected, ADD SIDING NOW (use "low" confidence if uncertain).
 3. Do I see any wall surfaces above ground level? → If YES, did I detect siding? If NO siding detected, ADD SIDING NOW (use "low" confidence if uncertain).
-4. Is my siding count zero? → If YES, re-examine the image for wall surfaces and ADD SIDING unless the entire visible wall is clearly full-height brick/stucco from ground to roof. Use "low" confidence if uncertain, but ADD SIDING.
-5. For each visible wall plane (front, side, etc.), do I have a siding object? → If NO for any plane, ADD SIDING NOW with at least "low" confidence.
-6. Am I uncertain about the wall material? → Output siding with "low" confidence anyway - missing siding is not acceptable.
+4. Do I see brick walls? → If YES, did I output them as "siding"? If they were output as "foundation" or missing, FIX THIS NOW - brick walls are siding.
+5. Do I see simple clear walls? → If YES, did I detect siding? If NO siding detected, ADD SIDING NOW (use "low" confidence if uncertain).
+6. Is my siding count zero? → If YES, re-examine the image for wall surfaces and ADD SIDING. Use "low" confidence if uncertain, but ADD SIDING.
+7. For each visible wall plane (front, side, etc.), do I have a siding object? → If NO for any plane, ADD SIDING NOW with at least "low" confidence.
+8. Am I uncertain about the wall material? → Output siding with "low" confidence anyway - missing siding is not acceptable.
 
-CRITICAL: Before outputting your JSON response, verify that siding objects exist for all wall surfaces above foundation level. If siding count is zero and walls are visible, you have made an error - add siding objects with "low" confidence at minimum. Better to have low-confidence siding than no siding at all.
+CRITICAL: Before outputting your JSON response, verify that siding objects exist for all wall surfaces above foundation level. If siding count is zero and walls are visible, you have made an error - add siding objects with "low" confidence at minimum. Better to have low-confidence siding than no siding at all. Remember: brick walls are siding, and simple clear walls must always be detected as siding.
 
 DIMENSION ESTIMATION (only when clearly measurable):
 1. ZOOM LEVEL (Current zoom: ${zoom}x):
@@ -430,9 +443,11 @@ STEP 1 - FOUNDATION SCAN (always do this first):
 
 STEP 2 - SIDING SCAN (always do this second):
 - Look at wall surfaces ABOVE where foundation ends (or above ground if no foundation)
-- Look for ANY wall cladding: boards, panels, shingles, painted surfaces, textured surfaces, smooth surfaces
+- Look for ANY wall cladding: boards, panels, shingles, painted surfaces, textured surfaces, smooth surfaces, brick walls
 - If ANY wall surface is visible above foundation level, prepare to output a "siding" object
-- Default assumption: it IS siding unless the ENTIRE wall is clearly brick/stucco from ground to roof
+- CRITICAL: Brick walls ARE siding - if you see brick walls (full-height or above foundation), output as "siding"
+- Simple clear walls ALWAYS count as siding - even if you can't see material details
+- Default assumption: it IS siding unless it's ONLY a foundation band
 - If uncertain about the wall material: STILL output siding with "low" confidence
 - If the wall is painted or smooth: Output siding with "medium" confidence
 - NEVER skip siding - use low confidence if needed, but ALWAYS output siding when walls are visible
@@ -453,14 +468,16 @@ STEP 5 - BOUNDING BOXES:
 
 FINAL REMINDER BEFORE RESPONDING:
 - SIDING is the MOST IMPORTANT object type for exterior images
-- If you see a house/building exterior with walls, you MUST detect siding (unless entire wall is full-height brick/stucco)
+- If you see a house/building exterior with walls, you MUST detect siding - NO EXCEPTIONS
+- BRICK WALLS ARE SIDING - even full-height brick walls should be output as "siding", not excluded
+- Simple clear walls MUST be detected as siding - even if material details are unclear
 - If you detected foundation, you MUST detect siding above it
 - If you detected windows/doors, you MUST detect siding on that wall
 - DO NOT return a response with zero siding objects when walls are visible
 - Missing siding is a CRITICAL ERROR - always include siding when wall surfaces are present
 - USE LOW CONFIDENCE WHEN UNCERTAIN: Better to output siding with "low" confidence than to skip it entirely
 - When uncertain about wall material: Default to siding with "low" or "medium" confidence
-- Painted walls, smooth walls, textured walls = OUTPUT SIDING (use appropriate confidence level)
+- Painted walls, smooth walls, textured walls, brick walls, clear walls = OUTPUT SIDING (use appropriate confidence level)
 - Follow the 5-step methodology above for CONSISTENT results every time
 
 OUTPUT FORMAT (JSON ONLY):

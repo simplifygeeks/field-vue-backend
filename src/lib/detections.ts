@@ -103,14 +103,18 @@ export async function analyzeImagesForRoom(roomId: string, imageUrls: string[], 
           const typeCounts: Record<string, number> = {}
           
           for (const obj of json.objects) {
-            // Accept high confidence by default; allow medium for siding/foundation to improve recall
+            // Accept high confidence by default; allow medium/low for siding/foundation to improve recall
             const confidence = obj?.confidence?.toLowerCase()
             let typeKey = normalizeType(obj?.type) || normalizeType(obj?.name) || 'object'
             // Canonicalize common synonyms/mislabels for exterior
             if (typeKey === 'wall' || typeKey === 'cladding') typeKey = 'siding'
-            if (typeKey === 'masonry' || typeKey === 'brick' || typeKey === 'masonry_foundation' || typeKey === 'brick_foundation') typeKey = 'foundation'
+            // Only convert specific foundation-related terms to foundation; brick/masonry walls should be siding
+            if (typeKey === 'masonry_foundation' || typeKey === 'brick_foundation') typeKey = 'foundation'
+            // If it's brick or masonry but not explicitly foundation, treat as siding (brick walls are siding)
+            if (typeKey === 'masonry' || typeKey === 'brick') typeKey = 'siding'
             const isFoundationOrSiding = typeKey === 'foundation' || typeKey === 'siding'
-            if (!(confidence === 'high' || (isFoundationOrSiding && confidence === 'medium'))) {
+            // Accept high confidence for all types; accept medium/low for siding/foundation to improve recall
+            if (!(confidence === 'high' || (isFoundationOrSiding && (confidence === 'medium' || confidence === 'low')))) {
               console.log(`Skipping ${typeKey} with confidence: ${confidence}`)
               continue
             }
