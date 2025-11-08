@@ -367,6 +367,16 @@ DEFINITIONS, VISUAL CUES, AND STRICT RULES:
   * Do NOT include siding, trim, or other materials above the foundation
   * Height guideline: Generally less than ~35% of total wall height in the image (unless clearly a raised foundation or walkout basement)
   * Position guideline: Foundation box should typically occupy the lower half of the image (y > ~45-50%)
+- CRITICAL DIMENSION VALIDATION FOR FOUNDATION (MUST FOLLOW THESE STRICT RULES):
+  * Foundation HEIGHT must be between 0.5 feet (6 inches) and 3 feet (36 inches) - NEVER exceed 3 feet
+  * Foundation HEIGHT is typically 0.67-1.5 feet (8-18 inches) for most homes
+  * If you estimate foundation height > 3 feet, you are WRONG - re-examine and reduce to maximum 3 feet
+  * Foundation WIDTH should match the visible wall length in the image - do NOT extrapolate beyond what you can see
+  * Foundation surface area per object should typically be 5-50 square feet per visible wall segment
+  * If foundation area exceeds 100 square feet per object, you are likely overestimating - re-check your dimensions
+  * Foundation is a SHORT horizontal band, not a tall vertical wall - if height > width, you are likely measuring incorrectly
+  * Use reference objects (doors, windows) to validate scale - a door is ~7 feet tall, foundation is ~1 foot tall
+  * If your foundation dimensions seem unusually large, they are WRONG - foundation is always a small band at the base
 - Counting rules:
   * Count each continuous foundation segment visible along a wall plane as ONE foundation object
   * If foundation wraps around a corner and both sides are visible, count as TWO separate foundation objects (one per wall plane)
@@ -424,8 +434,15 @@ DIMENSION ESTIMATION (only when clearly measurable):
 2. SCALE REFERENCES (sanity check):
    - Typical exterior door height: 6.5–8 ft
    - Typical window height: 3–6 ft
+   - CRITICAL: Foundation height: 0.5–3 ft (typically 0.67–1.5 ft) - NEVER exceed 3 ft
 3. CONSERVATIVE ESTIMATION:
    - Provide estimates only when object edges are clear; otherwise lower confidence
+4. FOUNDATION DIMENSION VALIDATION (MANDATORY):
+   - Foundation height MUST be 0.5–3 feet - if > 3 feet, you are WRONG, cap at 3 feet maximum
+   - Foundation width should only cover visible wall length in image - do NOT extrapolate
+   - Foundation area per object should be 5–50 sqft typically, maximum 100 sqft per object
+   - If foundation dimensions seem large, validate against door/window references
+   - Foundation is SHORT (height) and WIDE (width) - if height > width, re-measure
 
 CONFIDENCE LEVELS:
 - "high": Completely visible and clearly identifiable
