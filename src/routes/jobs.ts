@@ -604,8 +604,8 @@ jobsRouter.get("/:id/rooms/estimated-items", async (c: any) => {
       where: (rooms, { eq }) => eq(rooms.jobId, jobId),
     });
 
-    // Build result object with roomId as key and item categories array as value
-    const result: Record<string, string[]> = {};
+    // Build result object with roomId as key and object with selected/unselected arrays
+    const result: Record<string, { selected: string[], unselected: string[] }> = {};
 
     for (const room of jobRooms) {
       // Get all room images for this room
@@ -613,22 +613,54 @@ jobsRouter.get("/:id/rooms/estimated-items", async (c: any) => {
         where: (roomImages, { eq }) => eq(roomImages.roomId, room.id),
       });
 
-      // Extract unique item categories (types) from all images
-      const itemCategoriesSet = new Set<string>();
+      // Extract unique item categories (types) from all images - these are the estimated items
+      const estimatedCategoriesSet = new Set<string>();
       
       for (const image of images) {
         const measurements = image.measurements as any;
         if (measurements && measurements.objects && Array.isArray(measurements.objects)) {
           for (const obj of measurements.objects) {
             if (obj.type && typeof obj.type === 'string') {
-              itemCategoriesSet.add(obj.type);
+              estimatedCategoriesSet.add(obj.type);
             }
           }
         }
       }
 
-      // Convert set to array and assign to room ID
-      result[room.id] = Array.from(itemCategoriesSet).sort();
+      const estimatedCategories = Array.from(estimatedCategoriesSet);
+
+      // Get stored selected/unselected categories from room measurements
+      const roomMeasurements = (room.measurements as any) || {};
+      const hasStoredSelections = roomMeasurements.selectedCategories !== undefined || 
+                                  roomMeasurements.unselectedCategories !== undefined;
+      
+      if (!hasStoredSelections) {
+        // Old jobs: return all estimated categories as selected, empty unselected
+        result[room.id] = {
+          selected: estimatedCategories.sort(),
+          unselected: [],
+        };
+      } else {
+        // New jobs: use stored values but filter to only include estimated categories
+        const storedSelected = Array.isArray(roomMeasurements.selectedCategories) 
+          ? roomMeasurements.selectedCategories 
+          : [];
+        const storedUnselected = Array.isArray(roomMeasurements.unselectedCategories) 
+          ? roomMeasurements.unselectedCategories 
+          : [];
+
+        const selected = storedSelected.filter((cat: string) => 
+          estimatedCategories.includes(cat)
+        );
+        const unselected = storedUnselected.filter((cat: string) => 
+          estimatedCategories.includes(cat)
+        );
+
+        result[room.id] = {
+          selected: selected.sort(),
+          unselected: unselected.sort(),
+        };
+      }
     }
 
     return c.json(result);
