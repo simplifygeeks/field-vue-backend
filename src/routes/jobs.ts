@@ -579,6 +579,162 @@ jobsRouter.get("/:id/rooms/:roomId/images", async (c: any) => {
   }
 });
 
+// Get all estimated item categories for all rooms in a job
+jobsRouter.get("/:id/rooms/estimated-items", async (c: any) => {
+  try {
+    const user = c.get("user");
+    if (!user) return c.json({ error: "Authentication required" }, 401);
+
+    const jobId = c.req.param("id");
+
+    // Verify job belongs to contractor
+    const job = await db.query.jobs.findFirst({
+      where: (jobs, { and, eq }) => and(
+        eq(jobs.id, jobId),
+        eq(jobs.contractorId, user.id)
+      ),
+    });
+
+    if (!job) {
+      return c.json({ error: "Job not found or access denied" }, 404);
+    }
+
+    // Get all rooms for this job
+    const jobRooms = await db.query.rooms.findMany({
+      where: (rooms, { eq }) => eq(rooms.jobId, jobId),
+    });
+
+    // Build result object with roomId as key and item categories array as value
+    const result: Record<string, string[]> = {};
+
+    for (const room of jobRooms) {
+      // Get all room images for this room
+      const images = await db.query.roomImages.findMany({
+        where: (roomImages, { eq }) => eq(roomImages.roomId, room.id),
+      });
+
+      // Extract unique item categories (types) from all images
+      const itemCategoriesSet = new Set<string>();
+      
+      for (const image of images) {
+        const measurements = image.measurements as any;
+        if (measurements && measurements.objects && Array.isArray(measurements.objects)) {
+          for (const obj of measurements.objects) {
+            if (obj.type && typeof obj.type === 'string') {
+              itemCategoriesSet.add(obj.type);
+            }
+          }
+        }
+      }
+
+      // Convert set to array and assign to room ID
+      result[room.id] = Array.from(itemCategoriesSet).sort();
+    }
+
+    return c.json(result);
+  } catch (error) {
+    console.error("Get estimated items error:", error);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+// Update selected/unselected item categories for a room
+jobsRouter.patch("/:jobId/rooms/:roomId/estimated-items", async (c: any) => {
+  try {
+    const user = c.get("user");
+    if (!user) return c.json({ error: "Authentication required" }, 401);
+
+    const jobId = c.req.param("jobId");
+    const roomId = c.req.param("roomId");
+
+    // Verify job belongs to contractor
+    const job = await db.query.jobs.findFirst({
+      where: (jobs, { and, eq }) => and(
+        eq(jobs.id, jobId),
+        eq(jobs.contractorId, user.id)
+      ),
+    });
+
+    if (!job) {
+      return c.json({ error: "Job not found or access denied" }, 404);
+    }
+
+    // Verify room belongs to job
+    const room = await db.query.rooms.findFirst({
+      where: (rooms, { and, eq }) => and(
+        eq(rooms.id, roomId),
+        eq(rooms.jobId, jobId)
+      ),
+    });
+
+    if (!room) {
+      return c.json({ error: "Room not found" }, 404);
+    }
+
+    // Get payload
+    const body = await c.req.json();
+    const selectedItems = Array.isArray(body.selectedItems) ? body.selectedItems : [];
+    const unselectedItems = Array.isArray(body.unselectedItems) ? body.unselectedItems : [];
+
+    // Get all room images to determine which categories are part of estimation
+    const images = await db.query.roomImages.findMany({
+      where: (roomImages, { eq }) => eq(roomImages.roomId, roomId),
+    });
+
+    // Extract estimated categories from images
+    const estimatedCategoriesSet = new Set<string>();
+    for (const image of images) {
+      const measurements = image.measurements as any;
+      if (measurements && measurements.objects && Array.isArray(measurements.objects)) {
+        for (const obj of measurements.objects) {
+          if (obj.type && typeof obj.type === 'string') {
+            estimatedCategoriesSet.add(obj.type);
+          }
+        }
+      }
+    }
+
+    const estimatedCategories = Array.from(estimatedCategoriesSet);
+
+    // Filter unselectedItems to only include those that are part of estimation
+    const validUnselectedItems = unselectedItems.filter((cat: string) => 
+      estimatedCategories.includes(cat)
+    );
+
+    // Get existing measurements
+    const existingMeasurements = (room.measurements as any) || {};
+
+    // Update measurements with selected/unselected categories
+    const updatedMeasurements = {
+      ...existingMeasurements,
+      selectedCategories: selectedItems,
+      unselectedCategories: validUnselectedItems,
+    };
+
+    // Update room
+    const [updatedRoom] = await db
+      .update(rooms)
+      .set({
+        measurements: updatedMeasurements,
+        updatedAt: new Date(),
+      })
+      .where(eq(rooms.id, roomId))
+      .returning();
+
+    return c.json({
+      message: "Room item categories updated successfully",
+      room: {
+        id: updatedRoom.id,
+        selectedCategories: selectedItems,
+        unselectedCategories: validUnselectedItems,
+      },
+    });
+  } catch (error) {
+    console.error("Update room estimated items error:", error);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
 // Delete a specific room image
 jobsRouter.delete("/:jobId/rooms/:roomId/images/:imageId", async (c: any) => {
   try {
